@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Programar asistencia{% endblock %}
+
+{% block content %}
+
+<div class="page-header"><h1>Programar asistencia</h1></div>
+
+<form method="post" id="form-programar" class="form-card">
+
+  {% csrf_token %}
+
+  <div class="form-group">
+
+    <label class="form-label">Modalidad</label>
+
+    <select class="form-input" name="modalidad" id="modalidad">
+
+      <option value="regular"{% if modalidad_preseleccionada == 'regular' %} selected{% endif %}>Regular</option>
+
+      <option value="flexi"{% if modalidad_preseleccionada == 'flexi' %} selected{% endif %}>Flexi</option>
+
+    </select>
+
+  </div>
+
+  <div id="bloque-regular">
+
+    <div class="form-group">
+
+      <label class="form-label">Asignación Regular</label>
+
+      <select class="form-input" name="asignacion_id" id="asignacion_id" {% if not asignaciones %}disabled{% endif %}>
+
+        {% if asignaciones %}
+
+          {% for a in asignaciones %}
+
+          <option value="{{ a.id }}">{{ a.regular.alumno }} — {{ a.horario }}</option>
+
+          {% endfor %}
+
+        {% else %}
+
+          <option value="">— Sin asignaciones activas —</option>
+
+        {% endif %}
+
+      </select>
+
+    </div>
+
+    {% if not asignaciones %}
+
+    {% include "includes/empty_hint.html" with mensaje="No hay asignaciones Regular activas." accion_url="regular_alta" accion_texto="Dar de alta Regular" %}
+
+    {% endif %}
+
+    <div class="form-group">
+
+      <label class="form-label">Fecha</label>
+
+      <input class="form-input" type="date" name="fecha" id="fecha" value="{{ hoy }}">
+
+    </div>
+
+  </div>
+
+  <div id="bloque-flexi" hidden>
+
+    <div class="form-group">
+
+      <label class="form-label">Reserva Flexi</label>
+
+      <select class="form-input" name="reserva_id" id="reserva_id" {% if not reservas %}disabled{% endif %}>
+
+        {% if reservas %}
+
+          {% for r in reservas %}
+
+          <option value="{{ r.id }}">{{ r.paquete.alumno }} — {{ r.fecha_clase }} {{ r.horario }}</option>
+
+          {% endfor %}
+
+        {% else %}
+
+          <option value="">— Sin reservas Flexi vigentes —</option>
+
+        {% endif %}
+
+      </select>
+
+    </div>
+
+    {% if not reservas %}
+
+    {% include "includes/empty_hint.html" with mensaje="No hay reservas Flexi en estado reservada." accion_url="flexi_reservar" accion_texto="Crear reserva Flexi" %}
+
+    {% endif %}
+
+  </div>
+
+  <div class="form-actions">
+
+    <button type="submit" class="btn-primary" id="btn-programar">Programar</button>
+
+  </div>
+
+</form>
+
+<p class="link-back"><a href="{% url 'asistencias_list' %}">Volver</a></p>
+
+<script>
+
+(function () {
+
+  const modalidad = document.getElementById('modalidad');
+
+  const bloqueRegular = document.getElementById('bloque-regular');
+
+  const bloqueFlexi = document.getElementById('bloque-flexi');
+
+  const asignacion = document.getElementById('asignacion_id');
+
+  const fecha = document.getElementById('fecha');
+
+  const reserva = document.getElementById('reserva_id');
+
+  const btn = document.getElementById('btn-programar');
+
+  const tieneAsignaciones = {{ asignaciones|yesno:"true,false" }};
+
+  const tieneReservas = {{ reservas|yesno:"true,false" }};
+
+  function actualizar() {
+
+    const esRegular = modalidad.value === 'regular';
+
+    bloqueRegular.hidden = !esRegular;
+
+    bloqueFlexi.hidden = esRegular;
+
+    asignacion.required = esRegular && tieneAsignaciones;
+
+    fecha.required = esRegular && tieneAsignaciones;
+
+    reserva.required = !esRegular && tieneReservas;
+
+    btn.disabled = esRegular ? !tieneAsignaciones : !tieneReservas;
+
+  }
+
+  modalidad.addEventListener('change', actualizar);
+
+  actualizar();
+
+})();
+
+</script>
+
+{% endblock %}
+
+

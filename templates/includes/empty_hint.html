@@ -1,0 +1,5 @@
+<p class="hint-box err">{{ mensaje }}</p>
+{% if accion_url and accion_texto %}
+<p><a class="btn btn-sm" href="{% url accion_url %}">{{ accion_texto }}</a></p>
+{% endif %}
+

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Comprar Flexi{% endblock %}
+
+{% block content %}
+
+<div class="page-header"><h1>Comprar Flexi</h1></div>
+
+<form method="post" class="form-card">
+
+  {% csrf_token %}
+
+  <div class="form-group">
+
+    <label class="form-label">Alumno</label>
+
+    <select class="form-input" name="alumno_id" required {% if not alumnos %}disabled{% endif %}>
+
+      {% if alumnos %}
+
+        {% for a in alumnos %}<option value="{{ a.id }}"{% if alumno_preseleccionado == a.id %} selected{% endif %}>{{ a }}</option>{% endfor %}
+
+      {% else %}
+
+        <option value="">— Sin alumnos adultos activos —</option>
+
+      {% endif %}
+
+    </select>
+
+  </div>
+
+  {% if not alumnos %}
+
+  {% include "includes/empty_hint.html" with mensaje="No hay alumnos adultos activos para comprar Flexi." accion_url="alumno_alta" accion_texto="Dar de alta un alumno" %}
+
+  {% endif %}
+
+  <div class="form-group">
+
+    <label class="form-label">Sesiones</label>
+
+    <input class="form-input" name="sesiones" type="number" min="5" max="30" value="10" required {% if not alumnos %}disabled{% endif %}>
+
+  </div>
+
+  <div class="form-group">
+
+    <label class="form-label">Método</label>
+
+    <select class="form-input" name="metodo_codigo" {% if not alumnos %}disabled{% endif %}>
+
+      <option value="efectivo">Efectivo</option>
+
+      <option value="transferencia">Transferencia</option>
+
+    </select>
+
+  </div>
+
+  <div class="form-group">
+
+    <label class="form-label">Referencia</label>
+
+    <input class="form-input" name="referencia" {% if not alumnos %}disabled{% endif %}>
+
+  </div>
+
+  <div class="form-actions">
+
+    <button type="submit" class="btn-primary" {% if not alumnos %}disabled{% endif %}>Comprar</button>
+
+  </div>
+
+</form>
+
+<p class="link-back"><a href="{% url 'flexi_list' %}">Volver</a></p>
+
+{% endblock %}
+
+

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Horarios / cupos{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Horarios / cupos</h1></div>
+<div class="panel">
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Horario</th><th>Capacidad</th><th>Regular</th><th>Flexi</th>
+          <th>Cupo</th><th>Activo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        <tr>
+          <td>{{ f.horario }}</td>
+          <td>{{ f.horario.capacidad }}</td>
+          <td>{{ f.regulares }}</td>
+          <td>{{ f.flexi }}</td>
+          <td>{% if f.cupo == 0 %}<span class="badge badge-lleno">Lleno</span>{% else %}{{ f.cupo }}{% endif %}</td>
+          <td>{% if f.horario.activo %}{% include "includes/badge.html" with label="sí" tone="activo" %}{% else %}{% include "includes/badge.html" with label="no" tone="inactivo" %}{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6">Sin horarios</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

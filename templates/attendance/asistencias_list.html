@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Asistencias{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+
+  <h1>Asistencias</h1>
+
+  <div class="page-actions">
+
+    <a class="btn btn-primary" href="{% url 'asistencia_programar' %}">Programar asistencia</a>
+
+  </div>
+
+</div>
+
+<div class="panel">
+
+  <div class="table-wrap">
+
+    <table class="data-table">
+
+      <thead>
+
+        <tr><th>Fecha</th><th>Horario</th><th>Alumno</th><th>Modalidad</th><th>Estado</th><th>Acciones</th></tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for a in asistencias %}
+
+        <tr>
+
+          <td>{{ a.fecha }}</td>
+
+          <td>{{ a.horario }}</td>
+
+          <td><a href="{% url 'alumno_detail' a.alumno_id %}">{{ a.alumno }}</a></td>
+
+          <td>{{ a.get_modalidad_display }}</td>
+
+          <td>{% include "includes/badge.html" with label=a.get_estado_display tone=a.estado %}</td>
+
+          <td>
+
+            {% if a.estado == "programada" %}
+
+            <form method="post" action="{% url 'asistencia_accion' a.id %}" class="inline-form">
+
+              {% csrf_token %}
+
+              <button class="btn btn-sm btn-primary" name="accion" value="asistio">Asistió</button>
+
+              <button class="btn btn-sm" name="accion" value="ausente">Ausente</button>
+
+              <button class="btn btn-sm btn-danger" name="accion" value="spirit">Cancelar Spirit</button>
+
+            </form>
+
+            {% endif %}
+
+          </td>
+
+        </tr>
+
+        {% empty %}
+
+        <tr><td colspan="6">Sin asistencias</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Pagar periodo{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+
+  <h1>Pagar periodo</h1>
+
+  <p><a href="{% url 'alumno_detail' periodo.regular.alumno_id %}">{{ periodo.regular.alumno }}</a> — {{ periodo.mes }}/{{ periodo.anio }}
+
+    {% include "includes/badge.html" with label=periodo.get_estado_display tone=periodo.estado %}
+
+  </p>
+
+  <p><strong>Pendiente: ${{ monto }}</strong></p>
+
+  {% if lineas %}
+
+  <p class="muted">Desglose:
+
+    {% for ln in lineas %}
+
+      {{ ln.get_concepto_display }} ${{ ln.monto }}{% if not forloop.last %}; {% endif %}
+
+    {% endfor %}
+
+  </p>
+
+  {% endif %}
+
+</div>
+
+<form method="post" class="form-card">
+
+  {% csrf_token %}
+
+  <div class="form-group">
+
+    <label class="form-label">Método</label>
+
+    <select class="form-input" name="metodo_codigo">
+
+      <option value="efectivo">Efectivo</option>
+
+      <option value="transferencia">Transferencia</option>
+
+    </select>
+
+  </div>
+
+  <div class="form-group">
+
+    <label class="form-label">Referencia</label>
+
+    <input class="form-input" name="referencia">
+
+  </div>
+
+  <div class="form-group">
+
+    <label class="form-label">Notas</label>
+
+    <input class="form-input" name="notas">
+
+  </div>
+
+  <div class="form-actions">
+
+    <button type="submit" class="btn-primary">Confirmar pago</button>
+
+  </div>
+
+</form>
+
+<p class="link-back"><a href="{% url 'pagos_list' %}">Volver</a></p>
+
+{% endblock %}

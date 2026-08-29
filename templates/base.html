@@ -1,0 +1,157 @@
+{% load static %}
+
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+  <meta charset="utf-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>{% block title %}Spirit Academia{% endblock %}</title>
+
+  <link rel="stylesheet" href="{% static 'css/spirit.css' %}">
+
+</head>
+
+<body class="{% block body_class %}{% endblock %}">
+
+  {% if user.is_authenticated %}
+
+  <div class="app-shell">
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+
+    <aside class="sidebar" id="sidebar">
+
+      <div class="brand">
+
+        Spirit Academia
+
+        <small>{% if es_direccion %}Dirección{% elif es_recepcion %}Recepción{% else %}Operación{% endif %}</small>
+
+      </div>
+
+      <nav class="sidebar-nav">
+
+        <a class="nav-link{% if nav_section == 'home' %} active{% endif %}" href="{% url 'home' %}">Inicio</a>
+
+        <a class="nav-link{% if nav_section == 'alumnos' %} active{% endif %}" href="{% url 'alumnos_list' %}">Alumnos</a>
+
+        <a class="nav-link{% if nav_section == 'horarios' %} active{% endif %}" href="{% url 'horarios_list' %}">Horarios</a>
+
+        <a class="nav-link{% if nav_section == 'pagos' %} active{% endif %}" href="{% url 'pagos_list' %}">Pagos</a>
+
+        <a class="nav-link{% if nav_section == 'regular' %} active{% endif %}" href="{% url 'regular_list' %}">Regular</a>
+
+        <a class="nav-link{% if nav_section == 'flexi' %} active{% endif %}" href="{% url 'flexi_list' %}">Flexi</a>
+
+        <a class="nav-link{% if nav_section == 'asistencias' %} active{% endif %}" href="{% url 'asistencias_list' %}">Asistencias</a>
+
+        <a class="nav-link{% if nav_section == 'compensaciones' %} active{% endif %}" href="{% url 'compensaciones_list' %}">Compensaciones</a>
+
+        <a class="nav-link{% if nav_section == 'excepciones' %} active{% endif %}" href="{% url 'excepciones_list' %}">Excepciones</a>
+
+      </nav>
+
+      <div class="sidebar-footer">
+
+        {{ user.username }}
+
+        · <a href="{% url 'logout' %}">Salir</a>
+
+      </div>
+
+    </aside>
+
+    <div class="main-wrap">
+
+      <header class="topbar">
+
+        <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Menú">☰</button>
+
+      </header>
+
+      <main class="main-content">
+
+  {% else %}
+
+      <main class="main-content">
+
+  {% endif %}
+
+        {% if messages %}
+
+          {% for m in messages %}<p class="msg">{{ m }}</p>{% endfor %}
+
+        {% endif %}
+
+        {% block content %}{% endblock %}
+
+  {% if user.is_authenticated %}
+
+      </main>
+
+    </div>
+
+  </div>
+
+  <script>
+
+  (function () {
+
+    var btn = document.getElementById('sidebar-toggle');
+
+    var sb = document.getElementById('sidebar');
+
+    var backdrop = document.getElementById('sidebar-backdrop');
+
+    function openSidebar() {
+
+      if (sb) sb.classList.add('open');
+
+      if (backdrop) backdrop.hidden = false;
+
+    }
+
+    function closeSidebar() {
+
+      if (sb) sb.classList.remove('open');
+
+      if (backdrop) backdrop.hidden = true;
+
+    }
+
+    if (btn && sb) {
+
+      btn.addEventListener('click', function () {
+
+        if (sb.classList.contains('open')) closeSidebar();
+
+        else openSidebar();
+
+      });
+
+    }
+
+    if (backdrop) {
+
+      backdrop.addEventListener('click', closeSidebar);
+
+    }
+
+  })();
+
+  </script>
+
+  {% else %}
+
+      </main>
+
+  {% endif %}
+
+</body>
+
+</html>

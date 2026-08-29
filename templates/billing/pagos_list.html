@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Pagos{% endblock %}
+
+{% block content %}
+
+<div class="page-header"><h1>Pagos</h1></div>
+
+<section class="panel">
+
+  <h2>Periodos pendientes</h2>
+
+  <div class="table-wrap">
+
+    <table class="data-table">
+
+      <thead>
+
+        <tr><th>Alumno</th><th>Periodo</th><th>Estado</th><th>Monto</th><th>Desglose</th><th></th></tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for item in pendientes %}
+
+        <tr>
+
+          <td><a href="{% url 'alumno_detail' item.periodo.regular.alumno_id %}">{{ item.periodo.regular.alumno }}</a></td>
+
+          <td>{{ item.periodo.mes }}/{{ item.periodo.anio }}</td>
+
+          <td>{% include "includes/badge.html" with label=item.periodo.get_estado_display tone=item.periodo.estado %}</td>
+
+          <td>${{ item.monto }}</td>
+
+          <td class="muted">
+
+            {% for ln in item.lineas %}
+
+              {{ ln.get_concepto_display }} ${{ ln.monto }}{% if not forloop.last %}; {% endif %}
+
+            {% empty %}—{% endfor %}
+
+          </td>
+
+          <td><a class="btn btn-sm btn-primary" href="{% url 'pago_periodo' item.periodo.id %}">Registrar pago</a></td>
+
+        </tr>
+
+        {% empty %}
+
+        <tr><td colspan="6">Sin periodos pendientes</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</section>
+
+<section class="panel">
+
+  <h2>Últimos pagos</h2>
+
+  <div class="table-wrap">
+
+    <table class="data-table">
+
+      <thead>
+
+        <tr><th>Fecha</th><th>Alumno</th><th>Monto</th><th>Método</th><th>Estado</th></tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for p in pagos %}
+
+        <tr>
+
+          <td>{{ p.fecha_pago }}</td>
+
+          <td><a href="{% url 'alumno_detail' p.alumno_id %}">{{ p.alumno }}</a></td>
+
+          <td>${{ p.monto_total }}</td>
+
+          <td>{{ p.metodo }}</td>
+
+          <td>{% include "includes/badge.html" with label=p.get_estado_display tone=p.estado %}</td>
+
+        </tr>
+
+        {% empty %}
+
+        <tr><td colspan="5">Sin pagos</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</section>
+
+{% endblock %}

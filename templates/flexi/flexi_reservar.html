@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Reservar Flexi{% endblock %}
+
+{% block content %}
+
+<div class="page-header"><h1>Reservar Flexi</h1></div>
+
+<form method="post" class="form-card">
+
+  {% csrf_token %}
+
+  <div class="form-group">
+
+    <label class="form-label">Paquete</label>
+
+    <select class="form-input" name="paquete_id" required {% if not paquetes %}disabled{% endif %}>
+
+      {% if paquetes %}
+
+        {% for p in paquetes %}
+
+        <option value="{{ p.id }}"{% if alumno_preseleccionado and p.alumno_id == alumno_preseleccionado %} selected{% endif %}>{{ p.alumno }} ({{ p.sesiones_disponibles }} ses., vigente hasta {{ p.fecha_fin }})</option>
+
+        {% endfor %}
+
+      {% else %}
+
+        <option value="">— Sin paquetes disponibles —</option>
+
+      {% endif %}
+
+    </select>
+
+  </div>
+
+  {% if not paquetes %}
+
+  {% include "includes/empty_hint.html" with mensaje="No hay paquetes Flexi activos con saldo y vigencia." accion_url="flexi_comprar" accion_texto="Comprar Flexi" %}
+
+  {% endif %}
+
+  <div class="form-group">
+
+    <label class="form-label">Horario</label>
+
+    <select class="form-input" name="horario_id" required {% if not horarios %}disabled{% endif %}>
+
+      {% if horarios %}
+
+        {% for h in horarios %}<option value="{{ h.id }}">{{ h }}</option>{% endfor %}
+
+      {% else %}
+
+        <option value="">— Sin horarios Flexi con cupo —</option>
+
+      {% endif %}
+
+    </select>
+
+  </div>
+
+  {% if not horarios %}
+
+  {% include "includes/empty_hint.html" with mensaje="No hay horarios Flexi activos con cupo." accion_url="horarios_list" accion_texto="Revisar horarios y cupos" %}
+
+  {% endif %}
+
+  <div class="form-group">
+
+    <label class="form-label">Fecha clase</label>
+
+    <input class="form-input" type="date" name="fecha_clase" required {% if not paquetes or not horarios %}disabled{% endif %}>
+
+  </div>
+
+  <div class="form-actions">
+
+    <button type="submit" class="btn-primary" {% if not paquetes or not horarios %}disabled{% endif %}>Reservar</button>
+
+  </div>
+
+</form>
+
+<p class="link-back"><a href="{% url 'flexi_list' %}">Volver</a></p>
+
+{% endblock %}
+
+

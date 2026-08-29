@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Alumnos{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+
+  <h1>Alumnos</h1>
+
+  <div class="page-actions">
+
+    <form method="get" class="inline-form search-form">
+
+      <input class="form-input" type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre" style="max-width:14rem;">
+
+      <button type="submit" class="btn">Buscar</button>
+
+      {% if q %}<a class="btn" href="{% url 'alumnos_list' %}">Limpiar</a>{% endif %}
+
+    </form>
+
+    <a class="btn btn-primary" href="{% url 'alumno_alta' %}">Nuevo alumno</a>
+
+  </div>
+
+</div>
+
+<div class="panel">
+
+  <div class="table-wrap">
+
+    <table class="data-table">
+
+      <thead>
+
+        <tr><th>ID</th><th>Nombre</th><th>Tipo</th><th>Estado</th></tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for a in alumnos %}
+
+        <tr>
+
+          <td>{{ a.id }}</td>
+
+          <td><a href="{% url 'alumno_detail' a.id %}">{{ a.nombre_completo }}</a></td>
+
+          <td>{{ a.get_tipo_display }}</td>
+
+          <td>{% include "includes/badge.html" with label=a.get_estado_display tone=a.estado %}</td>
+
+        </tr>
+
+        {% empty %}
+
+        <tr><td colspan="4">{% if q %}Sin resultados para «{{ q }}»{% else %}Sin alumnos{% endif %}</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+{% endblock %}

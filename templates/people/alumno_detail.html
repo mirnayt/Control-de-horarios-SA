@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}{{ alumno.nombre_completo }}{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+
+  <h1>{{ alumno.nombre_completo }}</h1>
+
+  <p>
+
+    {% include "includes/badge.html" with label=alumno.get_estado_display tone=alumno.estado %}
+
+    <span class="muted">· {{ alumno.get_tipo_display }}</span>
+
+    {% if alumno.notas %}<br><span class="muted">{{ alumno.notas }}</span>{% endif %}
+
+  </p>
+
+</div>
+
+
+
+<section class="panel">
+
+  <h2>Acciones</h2>
+
+  <p class="acciones">
+
+    <a class="btn" href="{% url 'regular_alta' %}?alumno_id={{ alumno.id }}">Alta Regular</a>
+
+    {% if periodos_pendientes %}
+
+    <a class="btn btn-primary" href="{% url 'pago_periodo' periodos_pendientes.0.periodo.id %}">Registrar pago</a>
+
+    {% else %}
+
+    <a class="btn" href="{% url 'pagos_list' %}">Pagos</a>
+
+    {% endif %}
+
+    {% if alumno.tipo == 'adulto' %}
+
+    <a class="btn" href="{% url 'flexi_comprar' %}?alumno_id={{ alumno.id }}">Comprar Flexi</a>
+
+    <a class="btn" href="{% url 'flexi_reservar' %}?alumno_id={{ alumno.id }}">Reservar Flexi</a>
+
+    {% endif %}
+
+    <a class="btn" href="{% url 'asistencia_programar' %}?alumno_id={{ alumno.id }}">Asistencia</a>
+
+    <a class="btn" href="{% url 'excepcion_nueva' %}?alumno_id={{ alumno.id }}">Excepción</a>
+
+  </p>
+
+</section>
+
+
+
+<section class="panel panel-danger">
+
+  <h2>Baja / reactivación</h2>
+
+  <form method="post" class="inline-form">{% csrf_token %}
+
+    {% if alumno.estado == 'activo' or alumno.estado == 'pago_vencido' or alumno.estado == 'pendiente_renovacion' %}
+
+    <button class="btn btn-danger btn-sm" name="accion" value="baja_voluntaria">Baja voluntaria</button>
+
+    <button class="btn btn-danger btn-sm" name="accion" value="baja_administrativa">Baja administrativa</button>
+
+    {% else %}
+
+    <button class="btn btn-primary btn-sm" name="accion" value="reactivar">Reactivar</button>
+
+    {% endif %}
+
+  </form>
+
+</section>
+
+
+
+<section class="panel">
+
+  <h2>Plan Regular</h2>
+
+  {% for reg in regulares %}
+
+  <p>{% include "includes/badge.html" with label=reg.get_estado_display tone=reg.estado %} <span class="muted">desde {{ reg.fecha_inicio }}</span></p>
+
+  <ul>
+
+    {% for a in reg.asignaciones.all %}
+
+    <li>{{ a.horario }}{% if not a.activa %} <span class="muted">(liberado)</span>{% endif %}</li>
+
+    {% empty %}
+
+    <li class="muted">Sin horarios asignados</li>
+
+    {% endfor %}
+
+  </ul>
+
+  {% empty %}
+
+  <p class="muted">Sin plan Regular. <a href="{% url 'regular_alta' %}?alumno_id={{ alumno.id }}">Alta Regular</a></p>
+
+  {% endfor %}
+
+</section>
+
+
+
+<div class="grid-2">
+
+  <section class="panel">
+
+    <h2>Pagos pendientes</h2>
+
+    <div class="table-wrap">
+
+      <table class="data-table">
+
+        <thead>
+
+          <tr><th>Periodo</th><th>Estado</th><th>Monto</th><th></th></tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for item in periodos_pendientes %}
+
+          <tr>
+
+            <td>{{ item.periodo.mes }}/{{ item.periodo.anio }}</td>
+
+            <td>{% include "includes/badge.html" with label=item.periodo.get_estado_display tone=item.periodo.estado %}</td>
+
+            <td>${{ item.monto }}</td>
+
+            <td><a class="btn btn-sm btn-primary" href="{% url 'pago_periodo' item.periodo.id %}">Cobrar</a></td>
+
+          </tr>
+
+          {% empty %}
+
+          <tr><td colspan="4">Al día</td></tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    <h3>Últimos pagos</h3>
+
+    <div class="table-wrap">
+
+      <table class="data-table">
+
+        <thead>
+
+          <tr><th>Fecha</th><th>Monto</th><th>Método</th></tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for p in pagos %}
+
+          <tr>
+
+            <td>{{ p.fecha_pago }}</td>
+
+            <td>${{ p.monto_total }}</td>
+
+            <td>{{ p.metodo }}</td>
+
+          </tr>
+
+          {% empty %}
+
+          <tr><td colspan="3">Sin pagos</td></tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+
+
+
+  <section class="panel">
+
+    <h2>Flexi</h2>
+
+    <div class="table-wrap">
+
+      <table class="data-table">
+
+        <thead>
+
+          <tr><th>Compra</th><th>Sesiones</th><th>Vence</th><th>Estado</th></tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for pkg in paquetes_flexi %}
+
+          <tr>
+
+            <td>{{ pkg.fecha_compra }}</td>
+
+            <td>{{ pkg.sesiones_disponibles }}/{{ pkg.sesiones_compradas }}</td>
+
+            <td>{{ pkg.fecha_fin }}</td>
+
+            <td>{% include "includes/badge.html" with label=pkg.get_estado_display tone=pkg.estado %}</td>
+
+          </tr>
+
+          {% empty %}
+
+          <tr><td colspan="4">Sin paquetes Flexi</td></tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    <h3>Reservas Flexi vigentes</h3>
+
+    <div class="table-wrap">
+
+      <table class="data-table">
+
+        <thead>
+
+          <tr><th>Fecha</th><th>Horario</th></tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for r in reservas_flexi %}
+
+          <tr>
+
+            <td>{{ r.fecha_clase }}</td>
+
+            <td>{{ r.horario }}</td>
+
+          </tr>
+
+          {% empty %}
+
+          <tr><td colspan="2">Sin reservas Flexi</td></tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+
+</div>
+
+
+
+<section class="panel">
+
+  <h2>Asistencias recientes</h2>
+
+  <div class="table-wrap">
+
+    <table class="data-table">
+
+      <thead>
+
+        <tr><th>Fecha</th><th>Horario</th><th>Modalidad</th><th>Estado</th></tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for a in asistencias %}
+
+        <tr>
+
+          <td>{{ a.fecha }}</td>
+
+          <td>{{ a.horario }}</td>
+
+          <td>{{ a.get_modalidad_display }}</td>
+
+          <td>{% include "includes/badge.html" with label=a.get_estado_display tone=a.estado %}</td>
+
+        </tr>
+
+        {% empty %}
+
+        <tr><td colspan="4">Sin asistencias</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+  <p><a href="{% url 'asistencia_programar' %}?alumno_id={{ alumno.id }}">Programar asistencia</a></p>
+
+</section>
+
+
+
+<p class="link-back"><a href="{% url 'alumnos_list' %}">← Alumnos</a></p>
+
+{% endblock %}

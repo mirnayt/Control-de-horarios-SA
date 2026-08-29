@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Alta Regular{% endblock %}
+
+{% block content %}
+
+<div class="page-header"><h1>Alta Regular</h1></div>
+
+<form method="post" class="form-card">
+
+  {% csrf_token %}
+
+  <div class="form-group">
+
+    <label class="form-label">Alumno</label>
+
+    <select class="form-input" name="alumno_id" required {% if not alumnos %}disabled{% endif %}>
+
+      {% if alumnos %}
+
+        {% for a in alumnos %}<option value="{{ a.id }}"{% if alumno_preseleccionado == a.id %} selected{% endif %}>{{ a }}</option>{% endfor %}
+
+      {% else %}
+
+        <option value="">— Sin alumnos activos —</option>
+
+      {% endif %}
+
+    </select>
+
+  </div>
+
+  {% if not alumnos %}
+
+  {% include "includes/empty_hint.html" with mensaje="No hay alumnos activos." accion_url="alumno_alta" accion_texto="Dar de alta un alumno" %}
+
+  {% endif %}
+
+  <div class="form-group checkbox-group">
+
+    <label class="form-label">Horarios Regular (máx. 3, un día cada uno) — <span id="horario-counter">0/3</span></label>
+
+    {% for item in horarios %}
+
+    <label><input type="checkbox" name="horario_ids" value="{{ item.horario.id }}" class="horario-check"> {{ item.horario }} <span class="muted">(cupo {{ item.cupo }})</span></label>
+
+    {% empty %}
+
+    {% include "includes/empty_hint.html" with mensaje="No hay horarios Regular activos con cupo." accion_url="horarios_list" accion_texto="Revisar horarios y cupos" %}
+
+    {% endfor %}
+
+  </div>
+
+  <div class="form-actions">
+
+    <button type="submit" class="btn-primary" {% if not alumnos or not horarios %}disabled{% endif %}>Dar de alta</button>
+
+  </div>
+
+</form>
+
+<p class="link-back"><a href="{% url 'regular_list' %}">Volver</a></p>
+
+<script>
+
+(function () {
+
+  var checks = document.querySelectorAll('.horario-check');
+
+  var counter = document.getElementById('horario-counter');
+
+  function actualizar() {
+
+    var n = document.querySelectorAll('.horario-check:checked').length;
+
+    if (counter) counter.textContent = n + '/3';
+
+  }
+
+  checks.forEach(function (cb) {
+
+    cb.addEventListener('change', function () {
+
+      var n = document.querySelectorAll('.horario-check:checked').length;
+
+      if (n > 3) {
+
+        cb.checked = false;
+
+        n = 3;
+
+      }
+
+      if (counter) counter.textContent = n + '/3';
+
+    });
+
+  });
+
+  actualizar();
+
+})();
+
+</script>
+
+{% endblock %}
