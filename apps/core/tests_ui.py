@@ -285,22 +285,42 @@ class UIHardeningTests(TestCase):
 
     def test_flexi_reservar_solo_horarios_flexi_con_cupo(self):
         alumno = alta_alumno(nombre_completo="Hor UI", tipo=TipoAlumno.ADULTO)
-        comprar_paquete_flexi(alumno=alumno, sesiones=10, metodo_codigo="efectivo")
-        h_flexi = self._horario(modalidades=[Modalidad.FLEXI])
-        h_regular = self._horario(modalidades=[Modalidad.REGULAR])
-        h_lleno = self._horario(
-            modalidades=[Modalidad.REGULAR, Modalidad.FLEXI], capacidad=1
+        pkg = comprar_paquete_flexi(alumno=alumno, sesiones=10, metodo_codigo="efectivo")
+        hoy = timezone.localdate()
+        h_flexi = Horario.objects.create(
+            dia=hoy.weekday(),
+            hora_inicio=time(10, 0),
+            hora_fin=time(13, 0),
+            duracion_minutos=180,
+            capacidad=4,
+            tipo_alumno=TipoHorario.ADULTO,
+            modalidades=[Modalidad.FLEXI],
+            activo=True,
+            salon=self.salon,
+            profesor=self.profesor,
         )
-        reg = alta_regular(
+        h_regular = self._horario(modalidades=[Modalidad.REGULAR])
+        h_lleno = Horario.objects.create(
+            dia=hoy.weekday(),
+            hora_inicio=time(14, 0),
+            hora_fin=time(17, 0),
+            duracion_minutos=180,
+            capacidad=1,
+            tipo_alumno=TipoHorario.ADULTO,
+            modalidades=[Modalidad.REGULAR, Modalidad.FLEXI],
+            activo=True,
+            salon=self.salon,
+            profesor=self.profesor,
+        )
+        alta_regular(
             alumno=alta_alumno(nombre_completo="Llena", tipo=TipoAlumno.ADULTO),
             horarios=[h_lleno],
             fecha_inicio=date(2026, 8, 1),
         )
-        programar_asistencia_regular(
-            asignacion=reg.asignaciones.get(activa=True),
-            fecha=date(2026, 9, 1),
+        r = self.c.get(
+            reverse("flexi_reservar"),
+            {"paquete_id": pkg.pk, "fecha_clase": hoy.isoformat()},
         )
-        r = self.c.get(reverse("flexi_reservar"))
         content = r.content.decode()
         self.assertIn(f'<option value="{h_flexi.pk}">', content)
         self.assertNotIn(f'<option value="{h_regular.pk}">', content)
@@ -332,10 +352,62 @@ class UIHardeningTests(TestCase):
         self.assertContains(r, "Seleccione una reserva Flexi.")
 
     def test_regular_alta_sin_horarios_mensaje(self):
+        alumno = alta_alumno(nombre_completo="SinHor", tipo=TipoAlumno.ADULTO)
         self._horario(modalidades=[Modalidad.FLEXI])
-        r = self.c.get(reverse("regular_alta"))
+        r = self.c.get(reverse("regular_alta"), {"alumno_id": alumno.pk})
         self.assertContains(r, "No hay horarios Regular activos con cupo")
         self.assertContains(r, "Revisar horarios y cupos")
+
+    def test_regular_alta_nino_solo_ve_horarios_nino(self):
+        nino = alta_alumno(nombre_completo="Nino UI", tipo=TipoAlumno.NINO)
+        adulto = alta_alumno(nombre_completo="Adulto UI", tipo=TipoAlumno.ADULTO)
+        h_nino = Horario.objects.create(
+            dia=DiaSemana.MARTES,
+            hora_inicio=time(15, 50),
+            hora_fin=time(17, 50),
+            duracion_minutos=120,
+            capacidad=4,
+            tipo_alumno=TipoHorario.NINO,
+            modalidades=[Modalidad.REGULAR],
+            activo=True,
+            salon=self.salon,
+            profesor=self.profesor,
+        )
+        h_adulto = Horario.objects.create(
+            dia=DiaSemana.LUNES,
+            hora_inicio=time(16, 0),
+            hora_fin=time(19, 0),
+            duracion_minutos=180,
+            capacidad=4,
+            tipo_alumno=TipoHorario.ADULTO,
+            modalidades=[Modalidad.REGULAR],
+            activo=True,
+            salon=self.salon,
+            profesor=self.profesor,
+        )
+        h_ambos = Horario.objects.create(
+            dia=DiaSemana.MIERCOLES,
+            hora_inicio=time(10, 0),
+            hora_fin=time(11, 0),
+            duracion_minutos=60,
+            capacidad=4,
+            tipo_alumno=TipoHorario.AMBOS,
+            modalidades=[Modalidad.REGULAR],
+            activo=True,
+            salon=self.salon,
+            profesor=self.profesor,
+        )
+        r_nino = self.c.get(reverse("regular_alta"), {"alumno_id": nino.pk})
+        content_nino = r_nino.content.decode()
+        self.assertIn(f'value="{h_nino.pk}"', content_nino)
+        self.assertIn(f'value="{h_ambos.pk}"', content_nino)
+        self.assertNotIn(f'value="{h_adulto.pk}"', content_nino)
+
+        r_adulto = self.c.get(reverse("regular_alta"), {"alumno_id": adulto.pk})
+        content_adulto = r_adulto.content.decode()
+        self.assertIn(f'value="{h_adulto.pk}"', content_adulto)
+        self.assertIn(f'value="{h_ambos.pk}"', content_adulto)
+        self.assertNotIn(f'value="{h_nino.pk}"', content_adulto)
 
     def test_excepcion_solo_alumnos_activos(self):
         activo = alta_alumno(nombre_completo="Activo", tipo=TipoAlumno.ADULTO)
@@ -348,12 +420,23 @@ class UIHardeningTests(TestCase):
 
     def test_programar_flexi_con_reserva_valida(self):
         alumno = alta_alumno(nombre_completo="Res UI", tipo=TipoAlumno.ADULTO)
-        h = self._horario(modalidades=[Modalidad.FLEXI])
+        h = Horario.objects.create(
+            dia=timezone.localdate().weekday(),
+            hora_inicio=time(10, 0),
+            hora_fin=time(13, 0),
+            duracion_minutos=180,
+            capacidad=4,
+            tipo_alumno=TipoHorario.ADULTO,
+            modalidades=[Modalidad.FLEXI],
+            activo=True,
+            salon=self.salon,
+            profesor=self.profesor,
+        )
         pkg = comprar_paquete_flexi(
             alumno=alumno, sesiones=10, metodo_codigo="efectivo"
         )
         reserva = reservar_flexi(
-            paquete=pkg, horario=h, fecha_clase=date(2026, 9, 1)
+            paquete=pkg, horario=h, fecha_clase=timezone.localdate()
         )
         r = self.c.post(
             reverse("asistencia_programar"),
@@ -438,13 +521,16 @@ class UIDashboardTests(TestCase):
     def test_formularios_preseleccionan_alumno(self):
         alumno = alta_alumno(nombre_completo="Pre UI", tipo=TipoAlumno.ADULTO)
         q = f"?alumno_id={alumno.pk}"
-        for name in ("regular_alta", "flexi_comprar", "excepcion_nueva"):
+        for name in ("flexi_comprar", "excepcion_nueva"):
             r = self.c.get(reverse(name) + q)
             self.assertContains(
                 r,
                 f'<option value="{alumno.pk}" selected>',
                 msg_prefix=name,
             )
+        r = self.c.get(reverse("regular_alta") + q)
+        self.assertContains(r, alumno.nombre_completo)
+        self.assertContains(r, f'name="alumno_id" value="{alumno.pk}"')
         r = self.c.get(reverse("flexi_reservar") + q)
         self.assertEqual(r.status_code, 200)
         r2 = self.c.get(reverse("asistencia_programar") + q)
@@ -540,12 +626,15 @@ class UIUXPolishTests(TestCase):
         self.assertContains(r, "$")
 
     def test_regular_alta_cupo_y_contador(self):
+        alumno = alta_alumno(nombre_completo="Cupo UI", tipo=TipoAlumno.ADULTO)
         self._horario()
-        r = self.c.get(reverse("regular_alta"))
+        r = self.c.get(reverse("regular_alta"), {"alumno_id": alumno.pk})
         self.assertContains(r, "cupo")
         self.assertContains(r, "0/3")
 
     def test_asistencia_programar_fecha_hoy_y_lista_horario(self):
+        from apps.core.ui import proxima_fecha_dia
+
         alumno = alta_alumno(nombre_completo="Asis UI", tipo=TipoAlumno.ADULTO)
         h = self._horario()
         reg = alta_regular(alumno=alumno, horarios=[h], fecha_inicio=date(2026, 8, 1))
@@ -554,7 +643,9 @@ class UIUXPolishTests(TestCase):
             fecha=date(2026, 8, 4),
         )
         r = self.c.get(reverse("asistencia_programar"))
-        self.assertContains(r, f'value="{timezone.localdate().isoformat()}"')
+        sugerida = proxima_fecha_dia(h.dia).isoformat()
+        self.assertContains(r, f'data-fecha="{sugerida}"')
+        self.assertContains(r, f'value="{sugerida}"')
         r2 = self.c.get(reverse("asistencias_list"))
         self.assertContains(r2, str(h))
 
@@ -572,8 +663,14 @@ class UIUXPolishTests(TestCase):
             },
         )
         r = self.c.get(reverse("excepciones_list"))
-        self.assertContains(r, "Agosto de 2026")
+        self.assertContains(r, "2026")
         self.assertContains(r, "Pendiente de Dirección")
+        self.assertContains(r, "Espera decisión de Dirección")
+        cd = Client()
+        cd.login(username="dir_u", password="x")
+        r_dir = cd.get(reverse("excepciones_list"))
+        self.assertContains(r_dir, "Autorizar")
+        self.assertContains(r_dir, "Rechazar")
 
     def test_ficha_separa_bajas(self):
         alumno = alta_alumno(nombre_completo="Baja UI", tipo=TipoAlumno.ADULTO)
@@ -610,3 +707,136 @@ class UIUXPolishTests(TestCase):
         cd.login(username="dir_u", password="x")
         r_dir = cd.get(reverse("home"))
         self.assertContains(r_dir, "Dirección")
+
+
+class UIRecepcionDiaTests(TestCase):
+    """Inicio + horarios + roster para operar el día."""
+
+    def setUp(self):
+        ensure_roles()
+        seed_parametros_iniciales()
+        self.salon = Salon.objects.create(nombre="S1")
+        self.profesor = Profesor.objects.create(nombre="P1")
+        self.recepcion = User.objects.create_user("recep_dia", password="x")
+        self.recepcion.groups.add(Group.objects.get(name=ROLE_RECEPCION))
+        self.c = Client()
+        self.c.login(username="recep_dia", password="x")
+        self.hoy = timezone.localdate()
+
+    def _horario(self, dia=None, *, flexi=False):
+        if dia is None:
+            dia = self.hoy.weekday()
+        if flexi:
+            return Horario.objects.create(
+                dia=dia,
+                hora_inicio=time(10, 0),
+                hora_fin=time(13, 0),
+                duracion_minutos=180,
+                capacidad=4,
+                tipo_alumno=TipoHorario.ADULTO,
+                modalidades=[Modalidad.REGULAR, Modalidad.FLEXI],
+                activo=True,
+                salon=self.salon,
+                profesor=self.profesor,
+            )
+        return Horario.objects.create(
+            dia=dia,
+            hora_inicio=time(10, 0),
+            hora_fin=time(11, 0),
+            duracion_minutos=60,
+            capacidad=4,
+            tipo_alumno=TipoHorario.ADULTO,
+            modalidades=[Modalidad.REGULAR, Modalidad.FLEXI],
+            activo=True,
+            salon=self.salon,
+            profesor=self.profesor,
+        )
+
+    def test_home_clases_hoy_ver_grupo_y_buscar(self):
+        h = self._horario()
+        alumno = alta_alumno(nombre_completo="Grupo UI", tipo=TipoAlumno.ADULTO)
+        alta_regular(alumno=alumno, horarios=[h], fecha_inicio=date(2026, 8, 1))
+        r = self.c.get(reverse("home"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Buscar alumno")
+        self.assertContains(r, "P1")
+        self.assertContains(r, "1/4")
+        self.assertContains(r, reverse("horario_roster", args=[h.pk]))
+        self.assertContains(r, "Ver grupo")
+        self.assertContains(r, reverse("alumnos_list"))
+
+    def test_horarios_filtro_hoy_cuenta_flexi_con_fecha(self):
+        h = self._horario(flexi=True)
+        alumno = alta_alumno(nombre_completo="Flex Hoy", tipo=TipoAlumno.ADULTO)
+        pkg = comprar_paquete_flexi(
+            alumno=alumno, sesiones=10, metodo_codigo="efectivo"
+        )
+        reservar_flexi(paquete=pkg, horario=h, fecha_clase=self.hoy)
+        r = self.c.get(reverse("horarios_list"), {"dia": self.hoy.weekday()})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Regular + Flexi")
+        fila = r.context["filas"][0]
+        self.assertEqual(fila["regulares"], 0)
+        self.assertEqual(fila["flexi"], 1)
+        self.assertEqual(fila["ocupados"], 1)
+        self.assertEqual(r.context["fecha_clase"], self.hoy)
+        self.assertContains(r, reverse("horario_roster", args=[h.pk]))
+
+    def test_horarios_sin_fecha_solo_regular(self):
+        otro = (self.hoy.weekday() + 1) % 7
+        h = self._horario(dia=otro, flexi=True)
+        alumno = alta_alumno(nombre_completo="Solo Reg", tipo=TipoAlumno.ADULTO)
+        alta_regular(alumno=alumno, horarios=[h], fecha_inicio=date(2026, 8, 1))
+        pkg = comprar_paquete_flexi(
+            alumno=alumno, sesiones=10, metodo_codigo="efectivo"
+        )
+        delta = (otro - self.hoy.weekday()) % 7
+        if delta == 0:
+            delta = 7
+        fecha_res = self.hoy + timedelta(days=delta)
+        reservar_flexi(paquete=pkg, horario=h, fecha_clase=fecha_res)
+
+        r = self.c.get(reverse("horarios_list"), {"dia": otro})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "solo ocupación Regular")
+        self.assertIsNone(r.context["fecha_clase"])
+        fila = r.context["filas"][0]
+        self.assertEqual(fila["regulares"], 1)
+        self.assertEqual(fila["flexi"], 0)
+        self.assertEqual(fila["ocupados"], 1)
+        self.assertContains(r, "—")
+
+    def test_roster_con_fecha_lista_regular_y_flexi(self):
+        h = self._horario(flexi=True)
+        reg_al = alta_alumno(nombre_completo="Reg Roster", tipo=TipoAlumno.ADULTO)
+        flex_al = alta_alumno(nombre_completo="Flex Roster", tipo=TipoAlumno.ADULTO)
+        alta_regular(alumno=reg_al, horarios=[h], fecha_inicio=date(2026, 8, 1))
+        pkg = comprar_paquete_flexi(
+            alumno=flex_al, sesiones=10, metodo_codigo="efectivo"
+        )
+        reservar_flexi(paquete=pkg, horario=h, fecha_clase=self.hoy)
+        url = reverse("horario_roster", args=[h.pk])
+        r = self.c.get(url, {"fecha": self.hoy.isoformat()})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Reg Roster")
+        self.assertContains(r, "Flex Roster")
+        self.assertContains(r, reverse("alumno_detail", args=[reg_al.pk]))
+        self.assertContains(r, reverse("asistencia_programar"))
+
+    def test_roster_sin_fecha_no_lista_flexi(self):
+        otro = (self.hoy.weekday() + 2) % 7
+        h = self._horario(dia=otro, flexi=True)
+        flex_al = alta_alumno(nombre_completo="Flex Oculto", tipo=TipoAlumno.ADULTO)
+        pkg = comprar_paquete_flexi(
+            alumno=flex_al, sesiones=10, metodo_codigo="efectivo"
+        )
+        delta = (otro - self.hoy.weekday()) % 7
+        if delta == 0:
+            delta = 7
+        reservar_flexi(
+            paquete=pkg, horario=h, fecha_clase=self.hoy + timedelta(days=delta)
+        )
+        r = self.c.get(reverse("horario_roster", args=[h.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Elige una fecha")
+        self.assertNotContains(r, "Flex Oculto")

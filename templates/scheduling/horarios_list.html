@@ -1,32 +1,63 @@
-{% extends "base.html" %}
-{% block title %}Horarios / cupos{% endblock %}
-{% block content %}
-<div class="page-header"><h1>Horarios / cupos</h1></div>
-<div class="panel">
-  <div class="table-wrap">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Horario</th><th>Capacidad</th><th>Regular</th><th>Flexi</th>
-          <th>Cupo</th><th>Activo</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for f in filas %}
-        <tr>
-          <td>{{ f.horario }}</td>
-          <td>{{ f.horario.capacidad }}</td>
-          <td>{{ f.regulares }}</td>
-          <td>{{ f.flexi }}</td>
-          <td>{% if f.cupo == 0 %}<span class="badge badge-lleno">Lleno</span>{% else %}{{ f.cupo }}{% endif %}</td>
-          <td>{% if f.horario.activo %}{% include "includes/badge.html" with label="sí" tone="activo" %}{% else %}{% include "includes/badge.html" with label="no" tone="inactivo" %}{% endif %}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="6">Sin horarios</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endblock %}
-
+{% extends "base.html" %}
+{% block title %}Horarios / cupos{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Horarios / cupos</h1>
+  <div class="page-actions">
+    <a class="btn{% if dia_filtro == hoy.weekday %} btn-primary{% endif %}" href="{% url 'horarios_list' %}?dia={{ hoy.weekday }}">Hoy</a>
+    {% for value, label in dias.choices %}
+    <a class="btn{% if dia_filtro == value %} btn-primary{% endif %}" href="{% url 'horarios_list' %}?dia={{ value }}">{{ label }}</a>
+    {% endfor %}
+    <a class="btn{% if dia_filtro is None %} btn-primary{% endif %}" href="{% url 'horarios_list' %}?dia=all">Todos</a>
+  </div>
+</div>
+
+{% if fecha_clase %}
+<p class="muted">Ocupación con fecha {{ fecha_clase|date:"j M Y" }} (Regular + Flexi de esa sesión).</p>
+{% else %}
+<p class="muted">Sin fecha de sesión: solo ocupación Regular recurrente (Flexi = 0).</p>
+{% endif %}
+
+<div class="panel">
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Horario</th>
+          <th>Profesor</th>
+          <th>Modalidades</th>
+          <th>Regular</th>
+          <th>Flexi</th>
+          <th>Ocupación</th>
+          <th>Cupo</th>
+          <th>Activo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in filas %}
+        <tr>
+          <td>{{ f.horario }}</td>
+          <td>{{ f.horario.profesor }}</td>
+          <td class="muted">{{ f.horario.modalidades|join:", " }}</td>
+          <td>{{ f.regulares }}</td>
+          <td>{% if fecha_clase %}{{ f.flexi }}{% else %}—{% endif %}</td>
+          <td>{{ f.ocupados }}/{{ f.horario.capacidad }}</td>
+          <td>{% if f.cupo == 0 %}<span class="badge badge-lleno">Lleno</span>{% else %}{{ f.cupo }}{% endif %}</td>
+          <td>{% if f.horario.activo %}{% include "includes/badge.html" with label="sí" tone="activo" %}{% else %}{% include "includes/badge.html" with label="no" tone="inactivo" %}{% endif %}</td>
+          <td>
+            {% if fecha_clase %}
+            <a class="btn btn-sm btn-primary" href="{% url 'horario_roster' f.horario.id %}?fecha={{ fecha_clase|date:'Y-m-d' }}">Ver grupo</a>
+            {% else %}
+            <a class="btn btn-sm btn-primary" href="{% url 'horario_roster' f.horario.id %}">Ver grupo</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9">Sin horarios</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

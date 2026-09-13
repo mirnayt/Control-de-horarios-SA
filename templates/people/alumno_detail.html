@@ -9,15 +9,18 @@
   <h1>{{ alumno.nombre_completo }}</h1>
 
   <p>
-
     {% include "includes/badge.html" with label=alumno.get_estado_display tone=alumno.estado %}
-
-    <span class="muted">· {{ alumno.get_tipo_display }}</span>
-
+    <span class="muted">· {{ alumno.clasificacion }}</span>
+    {% if alumno.edad is not None %}<span class="muted">· {{ alumno.edad }} años</span>{% endif %}
+    {% if alumno.fecha_nacimiento %}<span class="muted">· nac. {{ alumno.fecha_nacimiento }}</span>{% endif %}
+    {% if alumno.telefono or alumno.whatsapp %}
+    <br><span class="muted">Tel: {{ alumno.telefono|default:"—" }} · WhatsApp: {{ alumno.whatsapp|default:"—" }}</span>
+    {% endif %}
+    {% if alumno.es_menor and alumno.tutor %}
+    <br><span class="muted">Tutor: {{ alumno.tutor.nombre_completo }}{% if alumno.tutor.telefono %} ({{ alumno.tutor.telefono }}){% endif %}{% if alumno.tutor.parentesco %} · {{ alumno.tutor.parentesco }}{% endif %}</span>
+    {% endif %}
     {% if alumno.notas %}<br><span class="muted">{{ alumno.notas }}</span>{% endif %}
-
   </p>
-
 </div>
 
 
@@ -34,9 +37,13 @@
 
     <a class="btn btn-primary" href="{% url 'pago_periodo' periodos_pendientes.0.periodo.id %}">Registrar pago</a>
 
+    {% elif inscripcion_pendiente %}
+
+    <a class="btn btn-primary" href="{% url 'pago_inscripcion' alumno.id %}">Pagar inscripción</a>
+
     {% else %}
 
-    <a class="btn" href="{% url 'pagos_list' %}">Pagos</a>
+    <a class="btn" href="{% url 'pagos_list' %}?alumno_id={{ alumno.id }}">Pagos</a>
 
     {% endif %}
 

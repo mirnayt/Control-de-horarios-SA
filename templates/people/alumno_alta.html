@@ -1,27 +1,68 @@
-{% extends "base.html" %}
-{% block title %}Alta alumno{% endblock %}
-{% block content %}
-<div class="page-header"><h1>Alta alumno</h1></div>
-<form method="post" class="form-card">
-  {% csrf_token %}
-  <div class="form-group">
-    <label class="form-label">Nombre</label>
-    <input class="form-input" name="nombre_completo" required>
-  </div>
-  <div class="form-group">
-    <label class="form-label">Tipo</label>
-    <select class="form-input" name="tipo" required>
-      {% for val, label in tipos %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
-    </select>
-  </div>
-  <div class="form-group">
-    <label class="form-label">Notas</label>
-    <input class="form-input" name="notas">
-  </div>
-  <div class="form-actions">
-    <button type="submit" class="btn-primary">Crear</button>
-  </div>
-</form>
-<p class="link-back"><a href="{% url 'alumnos_list' %}">Volver</a></p>
-{% endblock %}
-
+{% extends "base.html" %}
+{% block title %}Alta alumno{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Alta alumno</h1></div>
+<form method="post" class="form-card" id="form-alta-alumno">
+  {% csrf_token %}
+  <div class="form-group">
+    <label class="form-label">Nombre</label>
+    <input class="form-input" name="nombre_completo" required>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Tipo (negocio)</label>
+    <select class="form-input" name="tipo" id="tipo" required>
+      {% for val, label in tipos %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+    </select>
+    <p class="muted">Adolescente se deriva de la fecha de nacimiento (13+ años) cuando el tipo es Niño.</p>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Fecha de nacimiento</label>
+    <input class="form-input" type="date" name="fecha_nacimiento">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Teléfono</label>
+    <input class="form-input" name="telefono">
+  </div>
+  <div class="form-group">
+    <label class="form-label">WhatsApp</label>
+    <input class="form-input" name="whatsapp">
+  </div>
+  <fieldset id="bloque-tutor" hidden>
+    <legend>Contacto del tutor (menores)</legend>
+    <div class="form-group">
+      <label class="form-label">Nombre del tutor</label>
+      <input class="form-input" name="tutor_nombre" id="tutor_nombre">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Teléfono del tutor</label>
+      <input class="form-input" name="tutor_telefono">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Parentesco</label>
+      <input class="form-input" name="tutor_parentesco">
+    </div>
+  </fieldset>
+  <div class="form-group">
+    <label class="form-label">Notas</label>
+    <input class="form-input" name="notas">
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn-primary">Crear</button>
+  </div>
+</form>
+<p class="link-back"><a href="{% url 'alumnos_list' %}">Volver</a></p>
+<script>
+(function () {
+  var tipo = document.getElementById('tipo');
+  var bloque = document.getElementById('bloque-tutor');
+  var tutorNombre = document.getElementById('tutor_nombre');
+  function sync() {
+    var esNino = tipo.value === 'nino';
+    bloque.hidden = !esNino;
+    tutorNombre.required = esNino;
+  }
+  tipo.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

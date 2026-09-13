@@ -98,10 +98,11 @@ class CalendarService:
 
 class CapacityService:
     """
-    Calcula cupo disponible por horario.
+    Calcula cupo disponible por horario / sesión.
 
-    Regular: cuenta AsignacionRegular activas.
-    Flexi: cuando exista ReservaFlexi (estado reservada); si no, 0.
+    Regular: cuenta AsignacionRegular activas (ocupan cupo recurrente).
+    Flexi: solo con fecha_clase — reservas en estado reservada de ESA fecha.
+    Sin fecha_clase: Flexi no resta (solo regulares).
     Overrides explícitos siguen siendo útiles en tests.
     """
 
@@ -115,23 +116,38 @@ class CapacityService:
         return qs.count()
 
     @staticmethod
-    def count_reservas_flexi_vigentes(horario) -> int:
+    def count_reservas_flexi_vigentes(horario, fecha_clase: date | None = None) -> int:
+        """
+        Reservas Flexi que ocupan cupo.
+        Sin fecha_clase → 0 (el cupo Flexi es por sesión/fecha).
+        """
+        if fecha_clase is None:
+            return 0
         try:
             Reserva = apps.get_model("flexi", "ReservaFlexi")
         except LookupError:
             return 0
-        qs = Reserva.objects.filter(horario=horario, estado="reservada")
-        return qs.count()
+        return Reserva.objects.filter(
+            horario=horario,
+            estado="reservada",
+            fecha_clase=fecha_clase,
+        ).count()
 
     @classmethod
     def cupo_disponible(
         cls,
         horario,
         *,
+        fecha_clase: date | None = None,
         regulares_activos: int | None = None,
         reservas_flexi_vigentes: int | None = None,
     ) -> int:
-        """cupo = capacidad − Regular activos − reservas Flexi vigentes."""
+        """
+        Con fecha_clase:
+          cupo = capacidad − regulares − reservas Flexi de esa fecha.
+        Sin fecha_clase:
+          cupo = capacidad − regulares (Flexi no acumula).
+        """
         if not horario.activo:
             return 0
         reg = (
@@ -142,7 +158,7 @@ class CapacityService:
         flex = (
             reservas_flexi_vigentes
             if reservas_flexi_vigentes is not None
-            else cls.count_reservas_flexi_vigentes(horario)
+            else cls.count_reservas_flexi_vigentes(horario, fecha_clase=fecha_clase)
         )
         return max(0, horario.capacidad - reg - flex)
 
@@ -152,12 +168,14 @@ class CapacityService:
         horario,
         plazas: int = 1,
         *,
+        fecha_clase: date | None = None,
         regulares_activos: int | None = None,
         reservas_flexi_vigentes: int | None = None,
     ) -> int:
         """Devuelve cupo si hay plazas; rechaza con SinCupoError si cupo=0 o insuficiente."""
         cupo = cls.cupo_disponible(
             horario,
+            fecha_clase=fecha_clase,
             regulares_activos=regulares_activos,
             reservas_flexi_vigentes=reservas_flexi_vigentes,
         )

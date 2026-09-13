@@ -10,6 +10,7 @@ from apps.scheduling.operacion_config import (
     CAPACIDAD_PLACEHOLDER,
     HORARIOS_OPERACION,
     PROFESOR_DEMO,
+    SALON_ADULTOS,
     SALON_DEFAULT,
     SALONES,
 )
@@ -30,15 +31,26 @@ class OperacionSeedTests(TestCase):
         seed_operacion_spirit()
         result = seed_operacion_spirit()
         self.assertEqual(result.horarios_creados, 0)
-        self.assertEqual(result.horarios_actualizados, 0)
         self.assertEqual(Horario.objects.count(), len(HORARIOS_OPERACION))
 
     def test_placeholders_provisionales(self):
         seed_operacion_spirit()
         for h in Horario.objects.all():
             self.assertEqual(h.capacidad, CAPACIDAD_PLACEHOLDER)
-            self.assertEqual(h.salon.nombre, SALON_DEFAULT)
+            expected_salon = (
+                SALON_ADULTOS if h.tipo_alumno == TipoAlumno.ADULTO else SALON_DEFAULT
+            )
+            self.assertEqual(h.salon.nombre, expected_salon)
             self.assertEqual(h.profesor.nombre, PROFESOR_DEMO)
+
+    def test_renombra_salones_antiguos(self):
+        Salon.objects.create(nombre="Sala multiusos", activo=True)
+        Salon.objects.create(nombre="Sala grande de pintura", activo=True)
+        seed_operacion_spirit()
+        self.assertFalse(Salon.objects.filter(nombre="Sala multiusos").exists())
+        self.assertFalse(Salon.objects.filter(nombre="Sala grande de pintura").exists())
+        self.assertTrue(Salon.objects.filter(nombre=SALON_DEFAULT).exists())
+        self.assertTrue(Salon.objects.filter(nombre=SALON_ADULTOS).exists())
 
     def test_modalidades_confirmadas(self):
         seed_operacion_spirit()
@@ -51,12 +63,21 @@ class OperacionSeedTests(TestCase):
             set(adulto_sem.modalidades),
             {Modalidad.REGULAR, Modalidad.FLEXI, Modalidad.SUELTA},
         )
-        adulto_sab = Horario.objects.get(
+        adulto_sab_am = Horario.objects.get(
             dia=DiaSemana.SABADO,
             hora_inicio=time(9, 0),
             tipo_alumno=TipoAlumno.ADULTO,
         )
-        self.assertEqual(adulto_sab.modalidades, [Modalidad.REGULAR])
+        self.assertEqual(adulto_sab_am.modalidades, [Modalidad.REGULAR])
+        adulto_sab_pm = Horario.objects.get(
+            dia=DiaSemana.SABADO,
+            hora_inicio=time(14, 0),
+            tipo_alumno=TipoAlumno.ADULTO,
+        )
+        self.assertEqual(
+            set(adulto_sab_pm.modalidades),
+            {Modalidad.REGULAR, Modalidad.FLEXI, Modalidad.SUELTA},
+        )
         nino = Horario.objects.get(
             dia=DiaSemana.MARTES,
             hora_inicio=time(15, 50),
@@ -66,12 +87,13 @@ class OperacionSeedTests(TestCase):
 
     def test_duraciones_calculadas(self):
         seed_operacion_spirit()
-        h170 = Horario.objects.get(
+        h180 = Horario.objects.get(
             dia=DiaSemana.LUNES,
             hora_inicio=time(16, 0),
             tipo_alumno=TipoAlumno.ADULTO,
         )
-        self.assertEqual(h170.duracion_minutos, 170)
+        self.assertEqual(h180.duracion_minutos, 180)
+        self.assertEqual(h180.hora_fin, time(19, 0))
         h230 = Horario.objects.get(
             dia=DiaSemana.SABADO,
             hora_inicio=time(9, 0),
@@ -84,6 +106,23 @@ class OperacionSeedTests(TestCase):
             tipo_alumno=TipoAlumno.NINO,
         )
         self.assertEqual(h110.duracion_minutos, 110)
+
+    def test_realinea_slots_flexi_170_a_180(self):
+        seed_operacion_spirit()
+        h = Horario.objects.get(
+            dia=DiaSemana.LUNES,
+            hora_inicio=time(16, 0),
+            tipo_alumno=TipoAlumno.ADULTO,
+        )
+        h.hora_fin = time(18, 50)
+        h.duracion_minutos = 170
+        h.save()
+        result = seed_operacion_spirit()
+        self.assertGreaterEqual(result.horarios_actualizados, 1)
+        h.refresh_from_db()
+        self.assertEqual(h.duracion_minutos, 180)
+        self.assertEqual(h.hora_fin, time(19, 0))
+        self.assertIn(Modalidad.FLEXI, h.modalidades)
 
     def test_parametros_tarifas_spirit(self):
         seed_operacion_spirit()

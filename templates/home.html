@@ -1,225 +1,143 @@
 {% extends "base.html" %}
 
-{% block title %}Recepción — Spirit{% endblock %}
+{% block title %}{% if es_direccion %}Dirección{% else %}Recepción{% endif %} — Spirit{% endblock %}
 
 {% block content %}
 
 <div class="page-header">
-
-  <h1>Recepción <small class="muted">{{ hoy|date:"l j M Y" }}</small></h1>
-
+  <h1>{% if es_direccion %}Dirección{% else %}Recepción{% endif %} <small class="muted">{{ hoy|date:"l j M Y" }}</small></h1>
   <p class="muted">Usuario: {{ user.username }}
-
-    {% if es_direccion %}(Dirección){% elif es_recepcion %}(Recepción){% endif %}
-
+    {% if es_direccion %}· Rol: <strong>Dirección</strong> (autoriza excepciones y reembolsos){% elif es_recepcion %}· Rol: Recepción{% endif %}
   </p>
-
+  <div class="page-actions">
+    <form method="get" action="{% url 'alumnos_list' %}" class="inline-form search-form">
+      <input class="form-input" type="search" name="q" placeholder="Buscar alumno" style="max-width:14rem;">
+      <button type="submit" class="btn">Buscar</button>
+    </form>
+  </div>
 </div>
-
-
 
 <div class="stats-grid">
-
-  <a class="card stat-card stat-card-link" href="{% url 'horarios_list' %}">
-
+  <a class="card stat-card stat-card-link" href="{% url 'horarios_list' %}?dia={{ hoy.weekday }}">
     <div class="stat-value">{{ clases_hoy|length }}</div>
-
     <div class="stat-label">Clases hoy</div>
-
   </a>
-
   <a class="card stat-card stat-card-link" href="{% url 'pagos_list' %}">
-
     <div class="stat-value">${{ total_pendiente }}</div>
-
     <div class="stat-label">Pagos pendientes ({{ pagos_pendientes|length }})</div>
-
   </a>
-
   <a class="card stat-card stat-card-link" href="{% url 'flexi_list' %}">
-
     <div class="stat-value">{{ flexi_por_vencer|length }}</div>
-
     <div class="stat-label">Flexi por vencer</div>
-
   </a>
-
 </div>
 
-
-
 <section class="panel">
-
   <h2>Acciones rápidas</h2>
-
   <p class="acciones">
-
     <a class="btn btn-primary" href="{% url 'alumno_alta' %}">Nuevo alumno</a>
-
+    {% if pagos_pendientes %}
+    <a class="btn" href="{% url 'pago_periodo' pagos_pendientes.0.periodo.id %}">Registrar pago</a>
+    {% elif inscripciones_pendientes %}
+    <a class="btn" href="{% url 'pago_inscripcion' inscripciones_pendientes.0.alumno_id %}">Registrar pago inscripción</a>
+    {% else %}
     <a class="btn" href="{% url 'pagos_list' %}">Registrar pago</a>
-
+    {% endif %}
     <a class="btn" href="{% url 'regular_alta' %}">Alta Regular</a>
-
     <a class="btn" href="{% url 'flexi_comprar' %}">Comprar Flexi</a>
-
     <a class="btn" href="{% url 'flexi_reservar' %}">Reservar Flexi</a>
-
     <a class="btn" href="{% url 'asistencia_programar' %}">Asistencia</a>
-
   </p>
-
 </section>
-
-
 
 <section class="panel">
-
   <h2>Clases de hoy</h2>
-
   <div class="table-wrap">
-
     <table class="data-table">
-
       <thead>
-
-        <tr><th>Horario</th><th>Salón</th><th>Reg.</th><th>Flexi</th><th>Cupo</th></tr>
-
-      </thead>
-
-      <tbody>
-
-        {% for f in clases_hoy %}
-
         <tr>
-
-          <td>{{ f.horario }}</td>
-
-          <td>{{ f.horario.salon }}</td>
-
-          <td>{{ f.regulares }}</td>
-
-          <td>{{ f.flexi }}</td>
-
-          <td>{% if f.cupo == 0 %}<span class="badge badge-lleno">Lleno</span>{% else %}{{ f.cupo }}{% endif %}</td>
-
+          <th>Horario</th>
+          <th>Salón</th>
+          <th>Profesor</th>
+          <th>Reg.</th>
+          <th>Flexi</th>
+          <th>Ocupación</th>
+          <th>Cupo</th>
+          <th></th>
         </tr>
-
+      </thead>
+      <tbody>
+        {% for f in clases_hoy %}
+        <tr>
+          <td>{{ f.horario }}</td>
+          <td>{{ f.horario.salon }}</td>
+          <td>{{ f.horario.profesor }}</td>
+          <td>{{ f.regulares }}</td>
+          <td>{{ f.flexi }}</td>
+          <td>{{ f.ocupados }}/{{ f.horario.capacidad }}</td>
+          <td>{% if f.cupo == 0 %}<span class="badge badge-lleno">Lleno</span>{% else %}{{ f.cupo }}{% endif %}</td>
+          <td>
+            <a class="btn btn-sm btn-primary" href="{% url 'horario_roster' f.horario.id %}?fecha={{ hoy|date:'Y-m-d' }}">Ver grupo</a>
+          </td>
+        </tr>
         {% empty %}
-
-        <tr><td colspan="5">Sin clases programadas hoy</td></tr>
-
+        <tr><td colspan="8">Sin clases programadas hoy</td></tr>
         {% endfor %}
-
       </tbody>
-
     </table>
-
   </div>
-
-  <p><a href="{% url 'horarios_list' %}">Ver todos los horarios</a></p>
-
+  <p><a href="{% url 'horarios_list' %}?dia={{ hoy.weekday }}">Ver horarios de hoy</a></p>
 </section>
-
-
 
 <div class="grid-2">
-
   <section class="panel">
-
     <h2>Pagos pendientes</h2>
-
     <div class="table-wrap">
-
       <table class="data-table">
-
         <thead>
-
           <tr><th>Alumno</th><th>Periodo</th><th>Estado</th><th>Monto</th><th></th></tr>
-
         </thead>
-
         <tbody>
-
           {% for item in pagos_pendientes %}
-
           <tr>
-
             <td><a href="{% url 'alumno_detail' item.periodo.regular.alumno_id %}">{{ item.periodo.regular.alumno }}</a></td>
-
             <td>{{ item.periodo.mes }}/{{ item.periodo.anio }}</td>
-
             <td>{% include "includes/badge.html" with label=item.periodo.get_estado_display tone=item.periodo.estado %}</td>
-
             <td>${{ item.monto }}</td>
-
             <td><a class="btn btn-sm btn-primary" href="{% url 'pago_periodo' item.periodo.id %}">Cobrar</a></td>
-
           </tr>
-
           {% empty %}
-
           <tr><td colspan="5">Sin periodos pendientes</td></tr>
-
           {% endfor %}
-
         </tbody>
-
       </table>
-
     </div>
-
     <p><a href="{% url 'pagos_list' %}">Ver pagos</a></p>
-
   </section>
-
-
 
   <section class="panel">
-
     <h2>Flexi por vencer</h2>
-
     <div class="table-wrap">
-
       <table class="data-table">
-
         <thead>
-
           <tr><th>Alumno</th><th>Sesiones</th><th>Vence</th><th></th></tr>
-
         </thead>
-
         <tbody>
-
           {% for pkg in flexi_por_vencer %}
-
           <tr>
-
             <td><a href="{% url 'alumno_detail' pkg.alumno_id %}">{{ pkg.alumno }}</a></td>
-
             <td>{{ pkg.sesiones_disponibles }}</td>
-
             <td>{{ pkg.fecha_fin }}</td>
-
             <td><a class="btn btn-sm" href="{% url 'flexi_reservar' %}?alumno_id={{ pkg.alumno_id }}">Reservar Flexi</a></td>
-
           </tr>
-
           {% empty %}
-
           <tr><td colspan="4">Sin paquetes próximos a vencer</td></tr>
-
           {% endfor %}
-
         </tbody>
-
       </table>
-
     </div>
-
     <p><a href="{% url 'flexi_list' %}">Ver Flexi</a></p>
-
   </section>
-
 </div>
 
 {% endblock %}

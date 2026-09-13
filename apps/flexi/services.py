@@ -14,7 +14,7 @@ from apps.params.models import ParametroVersion, VigenciaFlexi
 from apps.params.services import PricingService
 from apps.people.models import Alumno, EstadoAlumno, TipoAlumno
 from apps.scheduling.models import Modalidad, TipoAlumno as TipoHorario
-from apps.scheduling.services import CapacityService
+from apps.scheduling.services import CapacityService, SinCupoError
 
 from .models import (
     EstadoPaqueteFlexi,
@@ -76,12 +76,63 @@ def fecha_fin_vigencia(fecha_compra: date, meses: int) -> date:
     return add_months(fecha_compra, meses) - timedelta(days=1)
 
 
-def sesiones_por_horario(horario) -> int:
-    """1 sesión Flexi = 1 hora; duración debe ser hora(s) enteras."""
-    mins = int(horario.duracion_minutos)
-    if mins < 60 or mins % 60 != 0:
+DURACION_SESION_FLEXI_MINUTOS = 180
+
+
+def _mensaje_validation(exc: ValidationError) -> str:
+    if getattr(exc, "messages", None):
+        return " ".join(str(m) for m in exc.messages)
+    return str(exc)
+
+
+def assert_alumno_elegible_flexi(alumno: Alumno) -> None:
+    """Flexi solo adultos activos."""
+    if alumno.estado != EstadoAlumno.ACTIVO:
+        raise ValidationError("El alumno debe estar activo.")
+    if alumno.tipo != TipoAlumno.ADULTO:
+        raise ValidationError("Flexi solo aplica a alumnos adultos.")
+
+
+def assert_horario_reservable_flexi(
+    horario,
+    *,
+    alumno: Alumno | None = None,
+) -> None:
+    """
+    Horario apto para reserva Flexi:
+    modalidad Flexi, no niño, duración exacta 180 min (cualquier día, incl. sábado).
+    """
+    if not horario.activo:
+        raise ValidationError(f"El horario no está activo: {horario}.")
+    modalidades = horario.modalidades or []
+    if Modalidad.FLEXI not in modalidades:
+        raise ValidationError(f"El horario no acepta modalidad Flexi: {horario}.")
+    if int(horario.duracion_minutos) != DURACION_SESION_FLEXI_MINUTOS:
         raise ValidationError(
-            "Flexi solo admite horarios con duración en horas enteras."
+            f"Flexi solo admite sesiones de {DURACION_SESION_FLEXI_MINUTOS} minutos."
+        )
+    if horario.tipo_alumno == TipoHorario.NINO:
+        raise ValidationError("Flexi no aplica a horarios solo niño.")
+    if horario.tipo_alumno not in (
+        TipoHorario.ADULTO,
+        TipoHorario.AMBOS,
+    ):
+        raise ValidationError(f"Tipo de horario no compatible con Flexi: {horario}.")
+    if alumno is not None:
+        assert_alumno_elegible_flexi(alumno)
+        if (
+            horario.tipo_alumno == TipoHorario.ADULTO
+            and alumno.tipo != TipoAlumno.ADULTO
+        ):
+            raise ValidationError("El horario es solo adulto.")
+
+
+def sesiones_por_horario(horario) -> int:
+    """1 sesión Flexi = 1 hora; solo horarios de exactamente 180 min (3 sesiones)."""
+    mins = int(horario.duracion_minutos)
+    if mins != DURACION_SESION_FLEXI_MINUTOS:
+        raise ValidationError(
+            f"Flexi solo admite sesiones de {DURACION_SESION_FLEXI_MINUTOS} minutos."
         )
     return mins // 60
 
@@ -104,6 +155,20 @@ def ultimo_paquete(alumno: Alumno) -> PaqueteFlexi | None:
     )
 
 
+def paquete_reservable(
+    paquete: PaqueteFlexi,
+    *,
+    hoy: date | None = None,
+) -> bool:
+    """Activo, dentro de vigencia y con saldo en la bolsa."""
+    hoy = hoy or _hoy_local()
+    return (
+        paquete.estado == EstadoPaqueteFlexi.ACTIVO
+        and hoy <= paquete.fecha_fin
+        and paquete.sesiones_disponibles > 0
+    )
+
+
 def _mes_siguiente(d: date) -> date:
     return add_months(date(d.year, d.month, 1), 1)
 
@@ -122,10 +187,10 @@ def puede_comprar_flexi(
     fecha = fecha or _hoy_local()
     v = _version(version)
 
-    if alumno.estado != EstadoAlumno.ACTIVO:
-        return False, "El alumno debe estar activo."
-    if alumno.tipo != TipoAlumno.ADULTO:
-        return False, "Flexi solo aplica a alumnos adultos."
+    try:
+        assert_alumno_elegible_flexi(alumno)
+    except ValidationError as e:
+        return False, _mensaje_validation(e)
 
     activo = paquete_activo(alumno)
     if activo is not None:
@@ -148,8 +213,6 @@ def puede_comprar_flexi(
 
     ref = prev.fecha_fin
     if prev.estado == EstadoPaqueteFlexi.AGOTADO:
-        # Agotado puede ser antes de fecha_fin; ventana desde el mes siguiente
-        # al evento de agotado (aproximado: mes de última actualización útil).
         detalle = prev.detalle or {}
         agotado_iso = detalle.get("agotado_en_fecha")
         if agotado_iso:
@@ -166,21 +229,68 @@ def puede_comprar_flexi(
     return True, ""
 
 
-def _validar_horario_flexi(alumno: Alumno, horario) -> None:
-    if not horario.activo:
-        raise ValidationError(f"El horario no está activo: {horario}.")
-    modalidades = horario.modalidades or []
-    if Modalidad.FLEXI not in modalidades:
-        raise ValidationError(f"El horario no acepta modalidad Flexi: {horario}.")
-    if horario.tipo_alumno == TipoHorario.NINO:
-        raise ValidationError("Flexi no aplica a horarios solo niño.")
-    if horario.tipo_alumno == TipoHorario.ADULTO and alumno.tipo != TipoAlumno.ADULTO:
-        raise ValidationError("El horario es solo adulto.")
-    if horario.tipo_alumno not in (
-        TipoHorario.ADULTO,
-        TipoHorario.AMBOS,
-    ):
-        raise ValidationError(f"Tipo de horario no compatible con Flexi: {horario}.")
+def puede_reservar_flexi(
+    paquete: PaqueteFlexi,
+    horario,
+    fecha_clase: date,
+    *,
+    ahora: datetime | None = None,
+) -> tuple[bool, str]:
+    """
+    Fuente única de elegibilidad de reserva:
+    adulto, paquete vigente+saldo, horario 180 min Flexi, día, cupo por fecha.
+    """
+    ahora = ahora or _ahora()
+    hoy = timezone.localdate(ahora)
+
+    if not paquete_reservable(paquete, hoy=hoy):
+        if paquete.estado != EstadoPaqueteFlexi.ACTIVO:
+            return False, "El paquete Flexi no está activo."
+        if hoy > paquete.fecha_fin:
+            return False, "El paquete Flexi está vencido."
+        if paquete.sesiones_disponibles <= 0:
+            return False, "El paquete Flexi no tiene sesiones disponibles."
+        return False, "El paquete Flexi no es reservable."
+
+    if fecha_clase < hoy:
+        return False, "No se puede reservar en fecha pasada."
+    if fecha_clase > paquete.fecha_fin:
+        return False, "La clase está fuera de la vigencia del paquete."
+
+    alumno = paquete.alumno
+    try:
+        assert_horario_reservable_flexi(horario, alumno=alumno)
+        sesiones = sesiones_por_horario(horario)
+    except ValidationError as e:
+        return False, _mensaje_validation(e)
+
+    if int(horario.dia) != fecha_clase.weekday():
+        return False, "fecha_clase no coincide con el día del horario."
+
+    if paquete.sesiones_disponibles < sesiones:
+        return False, (
+            f"Sesiones insuficientes (disponibles={paquete.sesiones_disponibles}, "
+            f"requeridas={sesiones})."
+        )
+
+    try:
+        CapacityService.assert_tiene_cupo(
+            horario, plazas=1, fecha_clase=fecha_clase
+        )
+    except SinCupoError as e:
+        return False, _mensaje_validation(e)
+    except ValidationError as e:
+        return False, _mensaje_validation(e)
+
+    if ReservaFlexi.objects.filter(
+        paquete=paquete,
+        horario=horario,
+        fecha_clase=fecha_clase,
+        estado=EstadoReservaFlexi.RESERVADA,
+    ).exists():
+        return False, "Ya existe una reserva activa para ese horario/fecha."
+
+    return True, ""
 
 
 def _inicio_clase_aware(fecha_clase: date, hora: time) -> datetime:
@@ -188,6 +298,20 @@ def _inicio_clase_aware(fecha_clase: date, hora: time) -> datetime:
     if timezone.is_naive(naive):
         return timezone.make_aware(naive, timezone.get_current_timezone())
     return naive
+
+
+def conserva_sesion_al_cancelar(
+    reserva: ReservaFlexi,
+    *,
+    ahora: datetime | None = None,
+    version: ParametroVersion | None = None,
+) -> bool:
+    """True si la cancelación es ≥ flexi_cancelacion_horas (default 24)."""
+    ahora = ahora or _ahora()
+    v = _version(version or reserva.paquete.parametro_version)
+    inicio = _inicio_clase_aware(reserva.fecha_clase, reserva.hora_inicio)
+    umbral = timedelta(hours=v.flexi_cancelacion_horas)
+    return (inicio - ahora) >= umbral
 
 
 @transaction.atomic
@@ -277,39 +401,15 @@ def reservar_flexi(
     ahora = ahora or _ahora()
     hoy = timezone.localdate(ahora)
 
-    if paquete.estado != EstadoPaqueteFlexi.ACTIVO:
-        raise ValidationError("El paquete Flexi no está activo.")
-    if hoy > paquete.fecha_fin:
-        raise ValidationError("El paquete Flexi está vencido.")
-    if fecha_clase < hoy:
-        raise ValidationError("No se puede reservar en fecha pasada.")
-    if fecha_clase > paquete.fecha_fin:
-        raise ValidationError("La clase está fuera de la vigencia del paquete.")
-
-    alumno = paquete.alumno
-    _validar_horario_flexi(alumno, horario)
-
-    if int(horario.dia) != fecha_clase.weekday():
-        raise ValidationError(
-            "fecha_clase no coincide con el día del horario."
-        )
+    ok, motivo = puede_reservar_flexi(
+        paquete, horario, fecha_clase, ahora=ahora
+    )
+    if not ok:
+        if motivo.startswith("Sin cupo"):
+            raise SinCupoError(motivo)
+        raise ValidationError(motivo)
 
     sesiones = sesiones_por_horario(horario)
-    if paquete.sesiones_disponibles < sesiones:
-        raise ValidationError(
-            f"Sesiones insuficientes (disponibles={paquete.sesiones_disponibles}, "
-            f"requeridas={sesiones})."
-        )
-
-    CapacityService.assert_tiene_cupo(horario, plazas=1)
-
-    if ReservaFlexi.objects.filter(
-        paquete=paquete,
-        horario=horario,
-        fecha_clase=fecha_clase,
-        estado=EstadoReservaFlexi.RESERVADA,
-    ).exists():
-        raise ValidationError("Ya existe una reserva activa para ese horario/fecha.")
 
     paquete.sesiones_disponibles -= sesiones
     paquete.sesiones_consumidas += sesiones
@@ -352,9 +452,8 @@ def cancelar_reserva_flexi(
         raise ValidationError(f"La reserva no está activa ({reserva.estado}).")
 
     inicio = _inicio_clase_aware(reserva.fecha_clase, reserva.hora_inicio)
+    conserva = conserva_sesion_al_cancelar(reserva, ahora=ahora, version=v)
     anticipacion = inicio - ahora
-    umbral = timedelta(hours=v.flexi_cancelacion_horas)
-    conserva = anticipacion >= umbral
 
     paquete = reserva.paquete
     if conserva:

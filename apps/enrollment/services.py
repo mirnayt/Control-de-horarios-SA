@@ -32,8 +32,14 @@ def alta_alumno(
     tutor: Tutor | None = None,
     fecha: date | None = None,
     notas: str = "",
+    fecha_nacimiento: date | None = None,
+    telefono: str = "",
+    whatsapp: str = "",
 ) -> Alumno:
-    """Alta de alumno con inscripción única y cuota vigente ($500 por defecto)."""
+    """
+    Alta de alumno con inscripción única y cargo de cuota en billing.
+    El pago de inscripción es operación separada (billing.registrar_pago_inscripcion).
+    """
     if tipo not in TipoAlumno.values:
         raise ValidationError({"tipo": f"Tipo inválido: {tipo}"})
 
@@ -43,6 +49,9 @@ def alta_alumno(
         estado=EstadoAlumno.ACTIVO,
         tutor=tutor,
         notas=notas,
+        fecha_nacimiento=fecha_nacimiento,
+        telefono=(telefono or "").strip(),
+        whatsapp=(whatsapp or "").strip(),
     )
     alumno.full_clean()
     alumno.save()
@@ -51,12 +60,22 @@ def alta_alumno(
     if version is None:
         raise ValidationError("No hay versión de parámetros vigente.")
 
-    Inscripcion.objects.create(
+    # pagada no es fuente de verdad; se deja False y no se usa en flujos nuevos.
+    insc = Inscripcion.objects.create(
         alumno=alumno,
         fecha_original=fecha or timezone.localdate(),
         monto=version.cuota_inscripcion,
-        pagada=True,
+        pagada=False,
         parametro_version=version,
+    )
+
+    from apps.billing.services import asegurar_linea_inscripcion
+
+    asegurar_linea_inscripcion(
+        alumno=alumno,
+        monto=insc.monto,
+        inscripcion_id=insc.pk,
+        version=version,
     )
     return alumno
 

@@ -1,19 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Pagar periodo{% endblock %}
+{% block title %}Pagar inscripción{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Pagar periodo</h1>
-  <p><a href="{% url 'alumno_detail' periodo.regular.alumno_id %}">{{ periodo.regular.alumno }}</a> — {{ periodo.mes }}/{{ periodo.anio }}
-    {% include "includes/badge.html" with label=periodo.get_estado_display tone=periodo.estado %}
-  </p>
-  <p>Esperado: ${{ esperado }} · Pagado: ${{ pagado }} · <strong>Saldo: ${{ saldo }}</strong></p>
-  {% if lineas %}
-  <p class="muted">Desglose:
-    {% for ln in lineas %}
-      {{ ln.get_concepto_display }} ${{ ln.monto }}{% if not forloop.last %}; {% endif %}
-    {% endfor %}
-  </p>
-  {% endif %}
+  <h1>Pagar inscripción</h1>
+  <p><a href="{% url 'alumno_detail' alumno.id %}">{{ alumno.nombre_completo }}</a></p>
+  <p><strong>Saldo: ${{ linea.monto }}</strong></p>
 </div>
 <form method="post" class="form-card">
   {% csrf_token %}
@@ -37,5 +28,5 @@
     <button type="submit" class="btn-primary">Confirmar pago</button>
   </div>
 </form>
-<p class="link-back"><a href="{% url 'pagos_list' %}">Volver</a></p>
+<p class="link-back"><a href="{% url 'pagos_list' %}?alumno_id={{ alumno.id }}">Volver</a></p>
 {% endblock %}

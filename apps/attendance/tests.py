@@ -207,7 +207,7 @@ class PermisosCompensacionTests(AttendanceBaseTestCase):
 class FlexiSinDobleConsumoTests(AttendanceBaseTestCase):
     def test_asistio_flexi_no_doble_consumo(self):
         alumno = alta_alumno(nombre_completo="F1", tipo=TipoAlumno.ADULTO)
-        h = self._horario(DiaSemana.MARTES, duracion=60)
+        h = self._horario(DiaSemana.MARTES, duracion=180)
         pkg = comprar_paquete_flexi(
             alumno=alumno,
             sesiones=5,
@@ -222,21 +222,21 @@ class FlexiSinDobleConsumoTests(AttendanceBaseTestCase):
             ahora=self._aware(date(2026, 8, 1), time(9, 0)),
         )
         pkg.refresh_from_db()
-        self.assertEqual(pkg.sesiones_disponibles, 4)
-        self.assertEqual(pkg.sesiones_consumidas, 1)
+        self.assertEqual(pkg.sesiones_disponibles, 2)
+        self.assertEqual(pkg.sesiones_consumidas, 3)
 
         asist = programar_asistencia_flexi(reserva=reserva)
         marcar_asistio(asist, usuario=self.recepcion)
         pkg.refresh_from_db()
         reserva.refresh_from_db()
         # Sin segundo descuento
-        self.assertEqual(pkg.sesiones_disponibles, 4)
-        self.assertEqual(pkg.sesiones_consumidas, 1)
+        self.assertEqual(pkg.sesiones_disponibles, 2)
+        self.assertEqual(pkg.sesiones_consumidas, 3)
         self.assertEqual(reserva.estado, EstadoReservaFlexi.CONSUMIDA)
 
     def test_ausencia_flexi_no_doble_consumo(self):
         alumno = alta_alumno(nombre_completo="F2", tipo=TipoAlumno.ADULTO)
-        h = self._horario(DiaSemana.MARTES, duracion=60)
+        h = self._horario(DiaSemana.MARTES, duracion=180)
         pkg = comprar_paquete_flexi(
             alumno=alumno,
             sesiones=5,
@@ -263,7 +263,7 @@ class FlexiSinDobleConsumoTests(AttendanceBaseTestCase):
 
     def test_spirit_cancela_flexi_devuelve_sesion(self):
         alumno = alta_alumno(nombre_completo="F3", tipo=TipoAlumno.ADULTO)
-        h = self._horario(DiaSemana.MARTES, duracion=60)
+        h = self._horario(DiaSemana.MARTES, duracion=180)
         pkg = comprar_paquete_flexi(
             alumno=alumno,
             sesiones=5,
@@ -277,7 +277,7 @@ class FlexiSinDobleConsumoTests(AttendanceBaseTestCase):
             ahora=self._aware(date(2026, 8, 1), time(9, 0)),
         )
         pkg.refresh_from_db()
-        self.assertEqual(pkg.sesiones_disponibles, 4)
+        self.assertEqual(pkg.sesiones_disponibles, 2)
 
         asist = programar_asistencia_flexi(reserva=reserva)
         cancelar_por_spirit(asist, usuario=self.recepcion)

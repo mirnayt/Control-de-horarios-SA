@@ -24,11 +24,18 @@ BLOQUES_ADULTO_INICIAL = (
 METODOS_PAGO_INICIAL = (
     ("efectivo", "Efectivo"),
     ("transferencia", "Transferencia"),
+    ("link", "Link de pago"),
 )
 
 
 def seed_parametros_iniciales(*, force: bool = False) -> ParametroVersion:
     """Crea la primera versión de parámetros si no existe ninguna."""
+    for codigo, nombre in METODOS_PAGO_INICIAL:
+        MetodoPagoCatalogo.objects.get_or_create(
+            codigo=codigo,
+            defaults={"nombre": nombre, "activo": True},
+        )
+
     existing = ParametroVersion.objects.order_by("vigente_desde").first()
     if existing and not force:
         return existing
@@ -50,11 +57,6 @@ def seed_parametros_iniciales(*, force: bool = False) -> ParametroVersion:
             sesiones_min=smin,
             sesiones_max=smax,
             meses_vigencia=meses,
-        )
-    for codigo, nombre in METODOS_PAGO_INICIAL:
-        MetodoPagoCatalogo.objects.get_or_create(
-            codigo=codigo,
-            defaults={"nombre": nombre, "activo": True},
         )
     return version
 

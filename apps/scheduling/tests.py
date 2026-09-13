@@ -52,9 +52,9 @@ class CapacityServiceTests(TestCase):
         self.profesor = Profesor.objects.create(nombre="Profe Cupo")
         self.horario = Horario.objects.create(
             dia=DiaSemana.MARTES,
-            hora_inicio=time(18, 0),
+            hora_inicio=time(16, 0),
             hora_fin=time(19, 0),
-            duracion_minutos=60,
+            duracion_minutos=180,
             capacidad=4,
             tipo_alumno=TipoAlumno.ADULTO,
             modalidades=[Modalidad.REGULAR, Modalidad.FLEXI],
@@ -98,6 +98,74 @@ class CapacityServiceTests(TestCase):
             reservas_flexi_vigentes=0,
         )
         self.assertEqual(restante, 3)
+
+    def test_sin_fecha_flexi_no_resta(self):
+        """Sin fecha_clase el cupo solo considera regulares."""
+        self.assertEqual(
+            CapacityService.count_reservas_flexi_vigentes(self.horario),
+            0,
+        )
+        self.assertEqual(
+            CapacityService.cupo_disponible(
+                self.horario,
+                regulares_activos=1,
+                # override explícito: si no hubiera fecha, el default de count es 0
+            ),
+            3,
+        )
+
+    def test_cupo_por_fecha_clase(self):
+        from apps.enrollment.services import alta_alumno
+        from apps.flexi.services import comprar_paquete_flexi, reservar_flexi
+        from apps.params.services import seed_parametros_iniciales
+        from apps.people.models import TipoAlumno
+        from django.utils import timezone
+        from datetime import datetime
+
+        seed_parametros_iniciales()
+        alumno = alta_alumno(nombre_completo="Cupo Fecha", tipo=TipoAlumno.ADULTO)
+        pkg = comprar_paquete_flexi(
+            alumno=alumno,
+            sesiones=5,
+            metodo_codigo="efectivo",
+            fecha_compra=date(2026, 8, 1),
+        )
+        ahora = timezone.make_aware(
+            datetime.combine(date(2026, 8, 1), time(9, 0)),
+            timezone.get_current_timezone(),
+        )
+        # Martes 2026-08-04 y 2026-08-11
+        reservar_flexi(
+            paquete=pkg,
+            horario=self.horario,
+            fecha_clase=date(2026, 8, 4),
+            ahora=ahora,
+        )
+        self.assertEqual(CapacityService.cupo_disponible(self.horario), 4)
+        self.assertEqual(
+            CapacityService.cupo_disponible(
+                self.horario, fecha_clase=date(2026, 8, 4)
+            ),
+            3,
+        )
+        self.assertEqual(
+            CapacityService.cupo_disponible(
+                self.horario, fecha_clase=date(2026, 8, 11)
+            ),
+            4,
+        )
+        self.assertEqual(
+            CapacityService.count_reservas_flexi_vigentes(
+                self.horario, fecha_clase=date(2026, 8, 4)
+            ),
+            1,
+        )
+        self.assertEqual(
+            CapacityService.count_reservas_flexi_vigentes(
+                self.horario, fecha_clase=date(2026, 8, 11)
+            ),
+            0,
+        )
 
 
 class CalendarServiceTests(TestCase):

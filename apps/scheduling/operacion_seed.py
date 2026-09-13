@@ -14,6 +14,7 @@ from .operacion_config import (
     HORARIOS_OPERACION,
     PROFESOR_DEMO,
     SALON_DEFAULT,
+    SALON_RENAMES,
     SALONES,
 )
 
@@ -38,10 +39,14 @@ def seed_operacion_spirit(*, force: bool = False) -> OperacionSeedResult:
     """
     Carga salones, profesor demo, horarios y parámetros vigentes.
 
-    Idempotente: si los horarios ya existen (misma clave natural), no los modifica
-    salvo con force=True.
+    Clave natural: dia + hora_inicio + tipo_alumno.
+    Siempre alinea hora_fin, duración y modalidades (p. ej. Flexi 180 min).
+    capacidad/profesor solo se sobrescriben con force=True.
     """
     version = seed_parametros_iniciales(force=force)
+
+    for old_name, new_name in SALON_RENAMES:
+        Salon.objects.filter(nombre=old_name).update(nombre=new_name)
 
     for nombre in SALONES:
         Salon.objects.get_or_create(nombre=nombre, defaults={"activo": True})
@@ -51,7 +56,6 @@ def seed_operacion_spirit(*, force: bool = False) -> OperacionSeedResult:
         defaults={"activo": True, "notas": "Provisional — reemplazar en admin."},
     )
 
-    salon_default = Salon.objects.get(nombre=SALON_DEFAULT)
     creados = 0
     actualizados = 0
 
@@ -68,32 +72,59 @@ def seed_operacion_spirit(*, force: bool = False) -> OperacionSeedResult:
         hora_inicio = slot["hora_inicio"]
         hora_fin = slot["hora_fin"]
         duracion = _duracion_minutos(hora_inicio, hora_fin)
+        modalidades = list(slot["modalidades"])
 
-        lookup = {
+        clave = {
             "dia": slot["dia"],
             "hora_inicio": hora_inicio,
-            "hora_fin": hora_fin,
             "tipo_alumno": slot["tipo_alumno"],
         }
-        defaults = {
-            "duracion_minutos": duracion,
-            "capacidad": capacidad,
-            "modalidades": list(slot["modalidades"]),
-            "activo": True,
-            "salon": salon,
-            "profesor": profesor,
-        }
-
-        horario, created = Horario.objects.get_or_create(**lookup, defaults=defaults)
-        if created:
+        horario = (
+            Horario.objects.filter(**clave).order_by("id").first()
+        )
+        if horario is None:
+            Horario.objects.create(
+                **clave,
+                hora_fin=hora_fin,
+                duracion_minutos=duracion,
+                capacidad=capacidad,
+                modalidades=modalidades,
+                activo=True,
+                salon=salon,
+                profesor=profesor,
+            )
             creados += 1
             continue
 
+        changed = False
+        if horario.hora_fin != hora_fin:
+            horario.hora_fin = hora_fin
+            changed = True
+        if horario.duracion_minutos != duracion:
+            horario.duracion_minutos = duracion
+            changed = True
+        if list(horario.modalidades or []) != modalidades:
+            horario.modalidades = modalidades
+            changed = True
+        if horario.salon_id != salon.id:
+            horario.salon = salon
+            changed = True
+        if not horario.activo:
+            horario.activo = True
+            changed = True
         if force:
-            for field, value in defaults.items():
-                setattr(horario, field, value)
+            if horario.capacidad != capacidad:
+                horario.capacidad = capacidad
+                changed = True
+            if horario.profesor_id != profesor.id:
+                horario.profesor = profesor
+                changed = True
+        if changed:
             horario.save()
             actualizados += 1
+
+        # Evita duplicados del mismo slot con hora_fin antigua.
+        Horario.objects.filter(**clave).exclude(pk=horario.pk).delete()
 
     return OperacionSeedResult(
         salones=Salon.objects.filter(nombre__in=SALONES).count(),

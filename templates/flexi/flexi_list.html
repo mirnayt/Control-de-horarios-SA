@@ -1,121 +1,75 @@
 {% extends "base.html" %}
-
 {% block title %}Flexi{% endblock %}
-
 {% block content %}
-
 <div class="page-header">
-
   <h1>Flexi</h1>
-
   <div class="page-actions">
-
     <a class="btn btn-primary" href="{% url 'flexi_comprar' %}">Comprar Flexi</a>
-
     <a class="btn" href="{% url 'flexi_reservar' %}">Reservar Flexi</a>
-
   </div>
-
 </div>
 
 <section class="panel">
-
   <h2>Paquetes Flexi</h2>
-
   <div class="table-wrap">
-
     <table class="data-table">
-
       <thead>
-
-        <tr><th>Alumno</th><th>Sesiones</th><th>Disp.</th><th>Fin</th><th>Estado</th></tr>
-
-      </thead>
-
-      <tbody>
-
-        {% for p in paquetes %}
-
         <tr>
-
-          <td><a href="{% url 'alumno_detail' p.alumno_id %}">{{ p.alumno }}</a></td>
-
-          <td>{{ p.sesiones_compradas }}</td>
-
-          <td>{{ p.sesiones_disponibles }}</td>
-
-          <td>{{ p.fecha_fin }}</td>
-
-          <td>{% include "includes/badge.html" with label=p.get_estado_display tone=p.estado %}</td>
-
+          <th>Alumno</th>
+          <th>Compradas</th>
+          <th>Usadas</th>
+          <th>Reservadas</th>
+          <th>Disponibles</th>
+          <th>Inicio</th>
+          <th>Fin</th>
+          <th>Estado</th>
         </tr>
-
+      </thead>
+      <tbody>
+        {% for row in paquetes %}
+        <tr>
+          <td><a href="{% url 'alumno_detail' row.paquete.alumno_id %}">{{ row.paquete.alumno }}</a></td>
+          <td>{{ row.compradas }}</td>
+          <td>{{ row.usadas }}</td>
+          <td>{{ row.reservadas }}</td>
+          <td>{{ row.disponibles }}</td>
+          <td>{{ row.fecha_inicio }}</td>
+          <td>{{ row.fecha_fin }}</td>
+          <td>{% include "includes/badge.html" with label=row.paquete.get_estado_display tone=row.paquete.estado %}</td>
+        </tr>
         {% empty %}
-
-        <tr><td colspan="5">Sin paquetes Flexi</td></tr>
-
+        <tr><td colspan="8">Sin paquetes Flexi</td></tr>
         {% endfor %}
-
       </tbody>
-
     </table>
-
   </div>
-
 </section>
 
 <section class="panel">
-
   <h2>Reservas Flexi</h2>
-
   <div class="table-wrap">
-
     <table class="data-table">
-
       <thead>
-
         <tr><th>Alumno</th><th>Fecha</th><th>Horario</th><th></th></tr>
-
       </thead>
-
       <tbody>
-
         {% for r in reservas %}
-
         <tr>
-
           <td><a href="{% url 'alumno_detail' r.paquete.alumno_id %}">{{ r.paquete.alumno }}</a></td>
-
           <td>{{ r.fecha_clase }}</td>
-
           <td>{{ r.horario }}</td>
-
           <td>
-
             <form method="post" action="{% url 'flexi_cancelar' r.id %}" class="inline-form">
-
               {% csrf_token %}
-
               <button type="submit" class="btn btn-sm btn-danger">Cancelar</button>
-
             </form>
-
           </td>
-
         </tr>
-
         {% empty %}
-
         <tr><td colspan="4">Sin reservas Flexi</td></tr>
-
         {% endfor %}
-
       </tbody>
-
     </table>
-
   </div>
-
 </section>
-
 {% endblock %}

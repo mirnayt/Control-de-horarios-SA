@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Grupo — {{ horario }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Grupo</h1>
+  <div class="page-actions">
+    <form method="get" class="inline-form">
+      <label class="muted" for="fecha">Fecha sesión</label>
+      <input class="form-input" type="date" id="fecha" name="fecha" value="{% if fecha_clase %}{{ fecha_clase|date:'Y-m-d' }}{% endif %}">
+      <button type="submit" class="btn">Aplicar</button>
+    </form>
+    <a class="btn" href="{% url 'horarios_list' %}?dia={{ horario.dia }}">Volver a horarios</a>
+    <a class="btn" href="{% url 'regular_alta' %}">Alta Regular</a>
+    <a class="btn" href="{% url 'flexi_reservar' %}">Reservar Flexi</a>
+    <a class="btn" href="{% url 'asistencia_programar' %}">Asistencia</a>
+  </div>
+</div>
+
+<section class="panel">
+  <h2>Sesión</h2>
+  <p>
+    <strong>Fecha:</strong> {% if fecha_clase %}{{ fecha_clase|date:"l j M Y" }}{% else %}— (indique fecha para Flexi){% endif %}<br>
+    <strong>Horario:</strong> {{ horario }}<br>
+    <strong>Salón:</strong> {{ horario.salon }}<br>
+    <strong>Profesor:</strong> {{ horario.profesor }}<br>
+    <strong>Ocupación:</strong> {{ ocupados }}/{{ horario.capacidad }}
+    · <strong>Capacidad:</strong> {{ horario.capacidad }}
+    · <strong>Lugares disponibles:</strong> {% if cupo == 0 %}0 (lleno){% else %}{{ cupo }}{% endif %}
+  </p>
+</section>
+
+<section class="panel">
+  <h2>Alumnos Regular ({{ regulares }})</h2>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Alumno</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for a in asignaciones %}
+        <tr>
+          <td><a href="{% url 'alumno_detail' a.regular.alumno_id %}">{{ a.regular.alumno }}</a></td>
+          <td>{% include "includes/badge.html" with label=a.regular.get_estado_display tone=a.regular.estado %}</td>
+          <td><a class="btn btn-sm" href="{% url 'asistencia_programar' %}?alumno_id={{ a.regular.alumno_id }}">Asistencia</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3">Sin regulares activos en este horario</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Alumnos Flexi{% if fecha_clase %} de esta fecha ({{ flexi }}){% else %}{% endif %}</h2>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Alumno</th><th>Fecha</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% if fecha_clase %}
+          {% for r in reservas %}
+          <tr>
+            <td><a href="{% url 'alumno_detail' r.paquete.alumno_id %}">{{ r.paquete.alumno }}</a></td>
+            <td>{{ r.fecha_clase }}</td>
+            <td><a class="btn btn-sm" href="{% url 'asistencia_programar' %}?alumno_id={{ r.paquete.alumno_id }}">Asistencia</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3">Sin reservas Flexi para esta fecha</td></tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="3">Elige una fecha de sesión para listar Flexi</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

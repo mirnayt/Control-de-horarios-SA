@@ -32,6 +32,16 @@ class PeopleEnrollmentTests(TestCase):
         self.assertIsNotNone(nino.tutor)
         self.assertEqual(adulto.inscripcion.monto, Decimal("500.00"))
         self.assertEqual(nino.inscripcion.monto, self.params.cuota_inscripcion)
+        from apps.billing.models import ConceptoLinea, EstadoLineaCobro, LineaCobro
+
+        linea = LineaCobro.objects.get(
+            alumno=adulto, concepto=ConceptoLinea.INSCRIPCION
+        )
+        self.assertEqual(linea.estado, EstadoLineaCobro.PENDIENTE)
+        self.assertEqual(linea.monto, Decimal("500.00"))
+        self.assertEqual(
+            linea.reglas_aplicadas.get("inscripcion_id"), adulto.inscripcion.pk
+        )
 
     def test_nombre_completo_obligatorio(self):
         with self.assertRaises(ValidationError):
@@ -48,7 +58,6 @@ class PeopleEnrollmentTests(TestCase):
                 alumno=alumno,
                 fecha_original=alumno.inscripcion.fecha_original,
                 monto=Decimal("500.00"),
-                pagada=True,
             )
 
     def test_regreso_sin_nuevo_cobro_inscripcion(self):

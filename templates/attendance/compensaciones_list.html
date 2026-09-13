@@ -1,79 +1,53 @@
 {% extends "base.html" %}
-
 {% block title %}Compensaciones{% endblock %}
-
 {% block content %}
-
 <div class="page-header"><h1>Compensaciones</h1></div>
+<p class="muted">Clases canceladas por Spirit que requieren reposición o reembolso. Dirección autoriza reembolsos.</p>
 
 <div class="panel">
-
   <div class="table-wrap">
-
     <table class="data-table">
-
       <thead>
-
-        <tr><th>Alumno</th><th>Fecha</th><th>Horario</th><th>Estado</th><th>Tipo</th><th>Acciones</th></tr>
-
-      </thead>
-
-      <tbody>
-
-        {% for c in compensaciones %}
-
         <tr>
-
-          <td><a href="{% url 'alumno_detail' c.asistencia.alumno_id %}">{{ c.asistencia.alumno }}</a></td>
-
-          <td>{{ c.asistencia.fecha }}</td>
-
-          <td>{{ c.asistencia.horario }}</td>
-
-          <td>{% include "includes/badge.html" with label=c.get_estado_display tone=c.estado %}</td>
-
-          <td>{{ c.get_tipo_display|default:"—" }}</td>
-
-          <td>
-
-            {% if c.estado == "pendiente" %}
-
-            <form method="post" action="{% url 'compensacion_accion' c.id %}" class="inline-form">
-
-              {% csrf_token %}
-
-              <input class="form-input" name="notas" placeholder="Notas" style="width:auto;max-width:8rem;">
-
-              <button class="btn btn-sm" name="accion" value="reposicion">Reposición s/costo</button>
-
-              {% if es_direccion %}
-
-              <input class="form-input" name="monto" placeholder="Monto" size="6" style="width:auto;max-width:5rem;">
-
-              <button class="btn btn-sm btn-primary" name="accion" value="reembolso">Reembolso</button>
-
-              {% endif %}
-
-            </form>
-
-            {% endif %}
-
-          </td>
-
+          <th>Alumno</th>
+          <th>Clase / sesión</th>
+          <th>Motivo</th>
+          <th>Estado</th>
+          <th>Reposición / reembolso</th>
+          <th>Acciones</th>
         </tr>
-
+      </thead>
+      <tbody>
+        {% for c in compensaciones %}
+        <tr>
+          <td><a href="{% url 'alumno_detail' c.asistencia.alumno_id %}">{{ c.asistencia.alumno }}</a></td>
+          <td>{{ c.asistencia.fecha }} · {{ c.asistencia.horario }}</td>
+          <td>Cancelada por Spirit{% if c.notas %}: {{ c.notas }}{% endif %}</td>
+          <td>{% include "includes/badge.html" with label=c.get_estado_display tone=c.estado %}</td>
+          <td>{{ c.get_tipo_display|default:"Pendiente de decisión" }}{% if c.monto %} (${{ c.monto }}){% endif %}</td>
+          <td>
+            {% if c.estado == "pendiente" %}
+            <form method="post" action="{% url 'compensacion_accion' c.id %}" class="inline-form">
+              {% csrf_token %}
+              <input class="form-input" name="notas" placeholder="Notas" style="width:auto;max-width:8rem;">
+              <button class="btn btn-sm" name="accion" value="reposicion">Reposición s/costo</button>
+              {% if es_direccion %}
+              <input class="form-input" name="monto" placeholder="Monto" size="6" style="width:auto;max-width:5rem;">
+              <button class="btn btn-sm btn-primary" name="accion" value="reembolso">Autorizar reembolso</button>
+              {% endif %}
+            </form>
+            {% endif %}
+          </td>
+        </tr>
         {% empty %}
-
-        <tr><td colspan="6">Sin compensaciones</td></tr>
-
+        <tr>
+          <td colspan="6">
+            Aquí aparecen clases canceladas por Spirit que requieren reposición o reembolso.
+          </td>
+        </tr>
         {% endfor %}
-
       </tbody>
-
     </table>
-
   </div>
-
 </div>
-
 {% endblock %}

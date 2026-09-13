@@ -2,6 +2,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -12,13 +13,18 @@ from apps.flexi.models import (
     EstadoReservaFlexi,
 )
 from apps.flexi.services import (
+    DURACION_SESION_FLEXI_MINUTOS,
+    assert_horario_reservable_flexi,
     comprar_paquete_flexi,
     cancelar_reserva_flexi,
+    conserva_sesion_al_cancelar,
     ejecutar_vencimiento_flexi,
     fecha_fin_vigencia,
     marcar_no_show,
     meses_vigencia_para,
+    paquete_reservable,
     puede_comprar_flexi,
+    puede_reservar_flexi,
     reservar_flexi,
 )
 from apps.params.services import seed_parametros_iniciales
@@ -41,7 +47,7 @@ class FlexiBaseTestCase(TestCase):
         self,
         dia=DiaSemana.MARTES,
         *,
-        duracion=60,
+        duracion=DURACION_SESION_FLEXI_MINUTOS,
         capacidad=2,
         hora=10,
     ):
@@ -138,8 +144,57 @@ class ReservaCupoTests(FlexiBaseTestCase):
         )
         pkg.refresh_from_db()
         self.assertEqual(r.estado, EstadoReservaFlexi.RESERVADA)
-        self.assertEqual(pkg.sesiones_disponibles, 4)
-        self.assertEqual(CapacityService.cupo_disponible(h), 1)
+        self.assertEqual(pkg.sesiones_disponibles, 2)  # 5 − 3 h
+        self.assertEqual(CapacityService.cupo_disponible(h), 2)
+        self.assertEqual(
+            CapacityService.cupo_disponible(h, fecha_clase=date(2026, 8, 4)),
+            1,
+        )
+
+    def test_reserva_misma_fecha_llena_otra_fecha_libre(self):
+        h = self._horario(capacidad=1)
+        pkg = comprar_paquete_flexi(
+            alumno=self.alumno,
+            sesiones=5,
+            metodo_codigo="efectivo",
+            fecha_compra=date(2026, 8, 1),
+        )
+        ahora = self._aware(date(2026, 8, 1), time(9, 0))
+        reservar_flexi(
+            paquete=pkg,
+            horario=h,
+            fecha_clase=date(2026, 8, 4),
+            ahora=ahora,
+        )
+        self.assertEqual(
+            CapacityService.cupo_disponible(h, fecha_clase=date(2026, 8, 4)),
+            0,
+        )
+        self.assertEqual(
+            CapacityService.cupo_disponible(h, fecha_clase=date(2026, 8, 11)),
+            1,
+        )
+        otro = alta_alumno(nombre_completo="Otro Fecha", tipo=TipoAlumno.ADULTO)
+        pkg2 = comprar_paquete_flexi(
+            alumno=otro,
+            sesiones=5,
+            metodo_codigo="efectivo",
+            fecha_compra=date(2026, 8, 1),
+        )
+        with self.assertRaises(SinCupoError):
+            reservar_flexi(
+                paquete=pkg2,
+                horario=h,
+                fecha_clase=date(2026, 8, 4),
+                ahora=ahora,
+            )
+        r2 = reservar_flexi(
+            paquete=pkg2,
+            horario=h,
+            fecha_clase=date(2026, 8, 11),
+            ahora=ahora,
+        )
+        self.assertEqual(r2.estado, EstadoReservaFlexi.RESERVADA)
 
     def test_rechazo_sin_cupo(self):
         h = self._horario(capacidad=1)
@@ -215,7 +270,7 @@ class CancelacionNoShowTests(FlexiBaseTestCase):
         r.refresh_from_db()
         pkg.refresh_from_db()
         self.assertEqual(r.estado, EstadoReservaFlexi.CANCELADA_TARDE)
-        self.assertEqual(pkg.sesiones_disponibles, 4)
+        self.assertEqual(pkg.sesiones_disponibles, 2)
         self.assertEqual(CapacityService.cupo_disponible(h), 2)
 
     def test_no_show_consume(self):
@@ -236,7 +291,7 @@ class CancelacionNoShowTests(FlexiBaseTestCase):
         r.refresh_from_db()
         pkg.refresh_from_db()
         self.assertEqual(r.estado, EstadoReservaFlexi.NO_SHOW)
-        self.assertEqual(pkg.sesiones_disponibles, 4)
+        self.assertEqual(pkg.sesiones_disponibles, 2)
         self.assertEqual(CapacityService.cupo_disponible(h), 2)
 
 
@@ -257,14 +312,14 @@ class VencimientoTests(FlexiBaseTestCase):
             ahora=self._aware(date(2026, 8, 1), time(9, 0)),
         )
         pkg.refresh_from_db()
-        self.assertEqual(pkg.sesiones_disponibles, 4)
+        self.assertEqual(pkg.sesiones_disponibles, 2)
 
         run = ejecutar_vencimiento_flexi(fecha=date(2026, 9, 1))
         pkg.refresh_from_db()
         self.assertEqual(pkg.estado, EstadoPaqueteFlexi.VENCIDO)
         self.assertEqual(pkg.sesiones_disponibles, 0)
-        self.assertEqual(pkg.sesiones_vencidas, 4)
-        self.assertEqual(pkg.sesiones_consumidas, 1)
+        self.assertEqual(pkg.sesiones_vencidas, 2)
+        self.assertEqual(pkg.sesiones_consumidas, 3)
         self.assertEqual(len(run.detalle["vencidos"]), 1)
 
     def test_idempotencia_vencimiento(self):
@@ -311,7 +366,16 @@ class RegularMasFlexiTests(FlexiBaseTestCase):
         self.assertEqual(pkg.estado, EstadoPaqueteFlexi.ACTIVO)
         self.assertEqual(r.estado, EstadoReservaFlexi.RESERVADA)
         self.assertEqual(CapacityService.count_regulares_activos(h_reg), 1)
-        self.assertEqual(CapacityService.count_reservas_flexi_vigentes(h_flex), 1)
+        self.assertEqual(
+            CapacityService.count_reservas_flexi_vigentes(h_flex),
+            0,
+        )
+        self.assertEqual(
+            CapacityService.count_reservas_flexi_vigentes(
+                h_flex, fecha_clase=date(2026, 8, 4)
+            ),
+            1,
+        )
 
 
 class RenovacionTests(FlexiBaseTestCase):
@@ -358,3 +422,65 @@ class RenovacionTests(FlexiBaseTestCase):
         ok, motivo = puede_comprar_flexi(self.alumno, fecha=date(2026, 9, 10))
         self.assertFalse(ok)
         self.assertIn("1–", motivo)
+
+
+class ReglasFlexiCentralizadasTests(FlexiBaseTestCase):
+    def test_rechaza_nino_en_compra(self):
+        nino = alta_alumno(nombre_completo="Nino F", tipo=TipoAlumno.NINO)
+        ok, motivo = puede_comprar_flexi(nino, fecha=date(2026, 8, 1))
+        self.assertFalse(ok)
+        self.assertIn("adultos", motivo)
+
+    def test_rechaza_duracion_distinta_de_180(self):
+        h = self._horario(duracion=120, hora=10)
+        with self.assertRaises(ValidationError):
+            assert_horario_reservable_flexi(h, alumno=self.alumno)
+
+    def test_sabado_180_ok_sabado_corto_no(self):
+        h_ok = self._horario(DiaSemana.SABADO, duracion=180, hora=9)
+        assert_horario_reservable_flexi(h_ok, alumno=self.alumno)
+        h_bad = self._horario(DiaSemana.SABADO, duracion=120, hora=14)
+        with self.assertRaises(ValidationError):
+            assert_horario_reservable_flexi(h_bad, alumno=self.alumno)
+
+    def test_paquete_reservable_y_puede_reservar(self):
+        pkg = comprar_paquete_flexi(
+            alumno=self.alumno,
+            sesiones=5,
+            metodo_codigo="efectivo",
+            fecha_compra=date(2026, 8, 1),
+        )
+        self.assertTrue(paquete_reservable(pkg, hoy=date(2026, 8, 2)))
+        h = self._horario(capacidad=2)
+        ok, _ = puede_reservar_flexi(
+            pkg,
+            h,
+            date(2026, 8, 4),
+            ahora=self._aware(date(2026, 8, 2), time(9, 0)),
+        )
+        self.assertTrue(ok)
+
+    def test_conserva_sesion_24h(self):
+        h = self._horario(capacidad=2, hora=10)
+        pkg = comprar_paquete_flexi(
+            alumno=self.alumno,
+            sesiones=5,
+            metodo_codigo="efectivo",
+            fecha_compra=date(2026, 8, 1),
+        )
+        r = reservar_flexi(
+            paquete=pkg,
+            horario=h,
+            fecha_clase=date(2026, 8, 4),
+            ahora=self._aware(date(2026, 8, 1), time(9, 0)),
+        )
+        self.assertTrue(
+            conserva_sesion_al_cancelar(
+                r, ahora=self._aware(date(2026, 8, 2), time(10, 0))
+            )
+        )
+        self.assertFalse(
+            conserva_sesion_al_cancelar(
+                r, ahora=self._aware(date(2026, 8, 3), time(12, 0))
+            )
+        )

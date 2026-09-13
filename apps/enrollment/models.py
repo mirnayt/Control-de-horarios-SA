@@ -23,7 +23,10 @@ class Inscripcion(TimeStampedModel):
         decimal_places=2,
         help_text="Cuota cobrada al alta (snapshot; configurable vía ParametroVersion).",
     )
-    pagada = models.BooleanField(default=True)
+    pagada = models.BooleanField(
+        default=False,
+        help_text="Legacy; la fuente de verdad del pago es billing.LineaCobro.",
+    )
     parametro_version = models.ForeignKey(
         "params.ParametroVersion",
         on_delete=models.PROTECT,

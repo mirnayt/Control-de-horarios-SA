@@ -1,111 +1,156 @@
 {% extends "base.html" %}
-
 {% block title %}Pagos{% endblock %}
-
 {% block content %}
-
 <div class="page-header"><h1>Pagos</h1></div>
 
 <section class="panel">
+  <h2>Localizar alumno</h2>
+  <form method="get" class="inline-form search-form">
+    <input class="form-input" type="search" name="q" value="{{ q }}" placeholder="Nombre, ID o teléfono" style="max-width:16rem;">
+    <button type="submit" class="btn btn-primary">Buscar</button>
+    {% if q or alumno %}<a class="btn" href="{% url 'pagos_list' %}">Limpiar</a>{% endif %}
+  </form>
 
-  <h2>Periodos pendientes</h2>
-
-  <div class="table-wrap">
-
+  {% if resultados %}
+  <div class="table-wrap" style="margin-top:1rem;">
     <table class="data-table">
-
-      <thead>
-
-        <tr><th>Alumno</th><th>Periodo</th><th>Estado</th><th>Monto</th><th>Desglose</th><th></th></tr>
-
-      </thead>
-
+      <thead><tr><th>ID</th><th>Nombre</th><th>Teléfono</th><th></th></tr></thead>
       <tbody>
-
-        {% for item in pendientes %}
-
+        {% for a in resultados %}
         <tr>
-
-          <td><a href="{% url 'alumno_detail' item.periodo.regular.alumno_id %}">{{ item.periodo.regular.alumno }}</a></td>
-
-          <td>{{ item.periodo.mes }}/{{ item.periodo.anio }}</td>
-
-          <td>{% include "includes/badge.html" with label=item.periodo.get_estado_display tone=item.periodo.estado %}</td>
-
-          <td>${{ item.monto }}</td>
-
-          <td class="muted">
-
-            {% for ln in item.lineas %}
-
-              {{ ln.get_concepto_display }} ${{ ln.monto }}{% if not forloop.last %}; {% endif %}
-
-            {% empty %}—{% endfor %}
-
-          </td>
-
-          <td><a class="btn btn-sm btn-primary" href="{% url 'pago_periodo' item.periodo.id %}">Registrar pago</a></td>
-
+          <td>{{ a.id }}</td>
+          <td>{{ a.nombre_completo }}</td>
+          <td>{{ a.telefono|default:a.whatsapp|default:"—" }}</td>
+          <td><a class="btn btn-sm btn-primary" href="{% url 'pagos_list' %}?alumno_id={{ a.id }}">Ver cargos</a></td>
         </tr>
-
-        {% empty %}
-
-        <tr><td colspan="6">Sin periodos pendientes</td></tr>
-
         {% endfor %}
-
       </tbody>
-
     </table>
-
   </div>
+  {% elif q and not alumno %}
+  <p class="muted">Sin resultados para «{{ q }}».</p>
+  {% endif %}
 
+  {% if alumno and cargos %}
+  <h3 style="margin-top:1.25rem;">
+    <a href="{% url 'alumno_detail' alumno.id %}">{{ alumno.nombre_completo }}</a>
+    <span class="muted">· ID {{ alumno.id }}</span>
+  </h3>
+
+  {% if cargos.inscripcion %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Concepto</th><th>Esperado</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Inscripción</td>
+          <td>${{ cargos.inscripcion.monto }}</td>
+          <td>$0.00</td>
+          <td>${{ cargos.inscripcion.monto }}</td>
+          <td>{% include "includes/badge.html" with label=cargos.inscripcion.get_estado_display tone=cargos.inscripcion.estado %}</td>
+          <td><a class="btn btn-sm btn-primary" href="{% url 'pago_inscripcion' alumno.id %}">Registrar pago</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if cargos.periodos %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Periodo</th><th>Desglose</th><th>Esperado</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+        {% for item in cargos.periodos %}
+        <tr>
+          <td>{{ item.periodo.mes }}/{{ item.periodo.anio }}</td>
+          <td class="muted">
+            {% for ln in item.lineas %}{{ ln.get_concepto_display }} ${{ ln.monto }}{% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}
+          </td>
+          <td>${{ item.esperado }}</td>
+          <td>${{ item.pagado }}</td>
+          <td>${{ item.saldo }}</td>
+          <td>{% include "includes/badge.html" with label=item.periodo.get_estado_display tone=item.periodo.estado %}</td>
+          <td><a class="btn btn-sm btn-primary" href="{% url 'pago_periodo' item.periodo.id %}">Registrar pago</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if cargos.otras %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Concepto</th><th>Saldo</th><th>Estado</th></tr></thead>
+      <tbody>
+        {% for ln in cargos.otras %}
+        <tr>
+          <td>{{ ln.get_concepto_display }}</td>
+          <td>${{ ln.monto }}</td>
+          <td>{% include "includes/badge.html" with label=ln.get_estado_display tone=ln.estado %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if not cargos.inscripcion and not cargos.periodos and not cargos.otras %}
+  <p class="muted">Sin cargos pendientes para este alumno.</p>
+  {% endif %}
+  {% endif %}
 </section>
 
 <section class="panel">
-
-  <h2>Últimos pagos</h2>
-
+  <h2>Periodos pendientes</h2>
   <div class="table-wrap">
-
     <table class="data-table">
-
       <thead>
-
-        <tr><th>Fecha</th><th>Alumno</th><th>Monto</th><th>Método</th><th>Estado</th></tr>
-
+        <tr><th>Alumno</th><th>Periodo</th><th>Estado</th><th>Monto</th><th>Desglose</th><th></th></tr>
       </thead>
-
       <tbody>
-
-        {% for p in pagos %}
-
+        {% for item in pendientes %}
         <tr>
-
-          <td>{{ p.fecha_pago }}</td>
-
-          <td><a href="{% url 'alumno_detail' p.alumno_id %}">{{ p.alumno }}</a></td>
-
-          <td>${{ p.monto_total }}</td>
-
-          <td>{{ p.metodo }}</td>
-
-          <td>{% include "includes/badge.html" with label=p.get_estado_display tone=p.estado %}</td>
-
+          <td><a href="{% url 'alumno_detail' item.periodo.regular.alumno_id %}">{{ item.periodo.regular.alumno }}</a></td>
+          <td>{{ item.periodo.mes }}/{{ item.periodo.anio }}</td>
+          <td>{% include "includes/badge.html" with label=item.periodo.get_estado_display tone=item.periodo.estado %}</td>
+          <td>${{ item.monto }}</td>
+          <td class="muted">
+            {% for ln in item.lineas %}
+              {{ ln.get_concepto_display }} ${{ ln.monto }}{% if not forloop.last %}; {% endif %}
+            {% empty %}—{% endfor %}
+          </td>
+          <td><a class="btn btn-sm btn-primary" href="{% url 'pago_periodo' item.periodo.id %}">Registrar pago</a></td>
         </tr>
-
         {% empty %}
-
-        <tr><td colspan="5">Sin pagos</td></tr>
-
+        <tr><td colspan="6">Sin periodos pendientes</td></tr>
         {% endfor %}
-
       </tbody>
-
     </table>
-
   </div>
-
 </section>
 
+<section class="panel">
+  <h2>Últimos pagos</h2>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Fecha</th><th>Alumno</th><th>Monto</th><th>Método</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {% for p in pagos %}
+        <tr>
+          <td>{{ p.fecha_pago }}</td>
+          <td><a href="{% url 'alumno_detail' p.alumno_id %}">{{ p.alumno }}</a></td>
+          <td>${{ p.monto_total }}</td>
+          <td>{{ p.metodo }}</td>
+          <td>{% include "includes/badge.html" with label=p.get_estado_display tone=p.estado %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">Sin pagos</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endblock %}

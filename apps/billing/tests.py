@@ -15,8 +15,11 @@ from apps.billing.models import (
 )
 from apps.billing.services import (
     aplicar_recargo_si_corresponde,
+    asegurar_linea_inscripcion,
     asegurar_linea_mensualidad,
     ejecutar_cobranza_diaria,
+    inscripcion_pagada,
+    registrar_pago_inscripcion,
     registrar_pago_periodo,
 )
 from apps.catalog.models import Profesor, Salon
@@ -266,3 +269,48 @@ class SnapshotEIdempotenciaTests(BillingBaseTestCase):
             ).count(),
             1,
         )
+
+
+class InscripcionBillingTests(BillingBaseTestCase):
+    def test_alta_crea_linea_pendiente_sin_pago(self):
+        alumno = alta_alumno(nombre_completo="Insc Pend", tipo=TipoAlumno.ADULTO)
+        linea = LineaCobro.objects.get(
+            alumno=alumno, concepto=ConceptoLinea.INSCRIPCION
+        )
+        self.assertIsNone(linea.periodo_id)
+        self.assertEqual(linea.estado, EstadoLineaCobro.PENDIENTE)
+        self.assertEqual(linea.monto, self.params.cuota_inscripcion)
+        self.assertEqual(
+            linea.reglas_aplicadas.get("inscripcion_id"), alumno.inscripcion.pk
+        )
+        self.assertFalse(inscripcion_pagada(alumno))
+        self.assertEqual(Pago.objects.filter(alumno=alumno).count(), 0)
+
+    def test_pago_inscripcion_separado_e_idempotente_linea(self):
+        alumno = alta_alumno(nombre_completo="Insc Pago", tipo=TipoAlumno.ADULTO)
+        linea = asegurar_linea_inscripcion(
+            alumno=alumno,
+            monto=alumno.inscripcion.monto,
+            inscripcion_id=alumno.inscripcion.pk,
+        )
+        self.assertEqual(
+            LineaCobro.objects.filter(
+                alumno=alumno, concepto=ConceptoLinea.INSCRIPCION
+            ).count(),
+            1,
+        )
+
+        pago = registrar_pago_inscripcion(
+            alumno=alumno,
+            metodo_codigo="transferencia",
+            fecha_pago=date(2026, 8, 2),
+            referencia="TRX-1",
+        )
+        linea.refresh_from_db()
+        self.assertEqual(linea.estado, EstadoLineaCobro.PAGADA)
+        self.assertEqual(linea.pago_id, pago.pk)
+        self.assertEqual(pago.monto_total, self.params.cuota_inscripcion)
+        self.assertTrue(inscripcion_pagada(alumno))
+
+        with self.assertRaises(ValidationError):
+            registrar_pago_inscripcion(alumno=alumno, metodo_codigo="efectivo")

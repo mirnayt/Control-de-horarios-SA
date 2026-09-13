@@ -1,23 +1,26 @@
-{% extends "base.html" %}
-{% block body_class %}auth-page{% endblock %}
-{% block title %}Login — Spirit{% endblock %}
-{% block content %}
-<div class="auth-card">
-  <h1>Spirit Academia</h1>
-  {% if error %}<p class="err">{{ error }}</p>{% endif %}
-  <form method="post" class="form-card" style="box-shadow:none;border:none;padding:0;max-width:none;">
-    <div class="form-group">
-      <label class="form-label">Usuario</label>
-      <input class="form-input" name="username" required autofocus>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Contraseña</label>
-      <input class="form-input" type="password" name="password" required>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn-primary" style="width:100%;padding:0.6rem;">Entrar</button>
-    </div>
-  </form>
-</div>
-{% endblock %}
-
+{% extends "base.html" %}
+{% load static %}
+{% block body_class %}auth-page{% endblock %}
+{% block title %}Login — Spirit{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <img class="auth-logo" src="{% static 'img/logo-spirit-blanco.png' %}" alt="Spirit Academia">
+  <div class="auth-card">
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <form method="post" class="form-card auth-form">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label">Usuario</label>
+        <input class="form-input" name="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input class="form-input" type="password" name="password" required>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

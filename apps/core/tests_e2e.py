@@ -17,8 +17,12 @@ from apps.attendance.services import (
     programar_asistencia_regular,
     registrar_reposicion_sin_costo,
 )
-from apps.billing.models import ConceptoLinea, LineaCobro
-from apps.billing.services import ejecutar_cobranza_diaria, registrar_pago_periodo
+from apps.billing.models import ConceptoLinea, EstadoLineaCobro, LineaCobro
+from apps.billing.services import (
+    ejecutar_cobranza_diaria,
+    registrar_pago_inscripcion,
+    registrar_pago_periodo,
+)
 from apps.catalog.models import Profesor, Salon
 from apps.enrollment.models import Inscripcion
 from apps.enrollment.services import alta_alumno, reactivar_alumno
@@ -86,8 +90,24 @@ class Flujo1RegularPagoAsistencia(E2EBase):
         alumno = alta_alumno(nombre_completo="E2E Reg", tipo=TipoAlumno.ADULTO)
         self.assertEqual(alumno.estado, EstadoAlumno.ACTIVO)
         self.assertEqual(Inscripcion.objects.filter(alumno=alumno).count(), 1)
-        self.assertTrue(alumno.inscripcion.pagada)
         self.assertEqual(alumno.inscripcion.monto, self.params.cuota_inscripcion)
+
+        linea = LineaCobro.objects.get(
+            alumno=alumno, concepto=ConceptoLinea.INSCRIPCION
+        )
+        self.assertEqual(linea.estado, EstadoLineaCobro.PENDIENTE)
+        self.assertEqual(linea.monto, self.params.cuota_inscripcion)
+        self.assertEqual(
+            linea.reglas_aplicadas.get("inscripcion_id"), alumno.inscripcion.pk
+        )
+
+        registrar_pago_inscripcion(
+            alumno=alumno,
+            metodo_codigo="efectivo",
+            fecha_pago=date(2026, 8, 1),
+        )
+        linea.refresh_from_db()
+        self.assertEqual(linea.estado, EstadoLineaCobro.PAGADA)
 
         h = self._horario(DiaSemana.MARTES, duracion=180, capacidad=4)
         # Ago 2026: martes 4,11,18,25 = 4 occ × 3h = 12h → $1440
@@ -130,7 +150,7 @@ class Flujo2FlexiReservaAsistenciaCancel(E2EBase):
         self.assertEqual(pkg.pago.monto_total, pkg.monto)
         self.assertEqual(pkg.sesiones_disponibles, 10)
 
-        h = self._horario(DiaSemana.MARTES, capacidad=4)
+        h = self._horario(DiaSemana.MARTES, duracion=180, capacidad=4)
         reserva = reservar_flexi(
             paquete=pkg,
             horario=h,
@@ -139,13 +159,13 @@ class Flujo2FlexiReservaAsistenciaCancel(E2EBase):
         )
         pkg.refresh_from_db()
         self.assertEqual(reserva.estado, EstadoReservaFlexi.RESERVADA)
-        self.assertEqual(pkg.sesiones_disponibles, 9)
+        self.assertEqual(pkg.sesiones_disponibles, 7)
 
         asist = programar_asistencia_flexi(reserva=reserva)
         marcar_asistio(asist, usuario=self.recepcion)
         reserva.refresh_from_db()
         self.assertEqual(reserva.estado, EstadoReservaFlexi.CONSUMIDA)
-        self.assertEqual(pkg.sesiones_disponibles, 9)  # sin doble consumo
+        self.assertEqual(pkg.sesiones_disponibles, 7)  # sin doble consumo
 
         # Segunda reserva + cancel ≥24h conserva sesión
         pkg.refresh_from_db()
@@ -164,7 +184,7 @@ class Flujo2FlexiReservaAsistenciaCancel(E2EBase):
         pkg.refresh_from_db()
         r2.refresh_from_db()
         self.assertEqual(r2.estado, EstadoReservaFlexi.CANCELADA)
-        self.assertEqual(pkg.sesiones_disponibles, disp_antes + 1)
+        self.assertEqual(pkg.sesiones_disponibles, disp_antes + 3)
 
 
 class Flujo3PagoTardioRecargoLiberacion(E2EBase):
@@ -296,7 +316,7 @@ class Flujo6ExcepcionDireccion(E2EBase):
 
 class Flujo7CuposConflictoRegularFlexi(E2EBase):
     def test_cupo_lleno_bloquea_regular_y_flexi(self):
-        h = self._horario(DiaSemana.VIERNES, capacidad=1, hora=16)
+        h = self._horario(DiaSemana.VIERNES, duracion=180, capacidad=1, hora=16)
         a1 = alta_alumno(nombre_completo="E2E Cupo1", tipo=TipoAlumno.ADULTO)
         a2 = alta_alumno(nombre_completo="E2E Cupo2", tipo=TipoAlumno.ADULTO)
 
@@ -320,8 +340,9 @@ class Flujo7CuposConflictoRegularFlexi(E2EBase):
                 ahora=self._aware(date(2026, 8, 3), time(9, 0)),
             )
 
-    def test_flexi_reserva_ocupa_cupo_frente_a_regular(self):
-        h = self._horario(DiaSemana.VIERNES, capacidad=1, hora=17)
+    def test_flexi_reserva_ocupa_cupo_de_esa_fecha_no_bloquea_regular(self):
+        """Flexi resta cupo solo en fecha_clase; Regular mira cupo recurrente."""
+        h = self._horario(DiaSemana.VIERNES, duracion=180, capacidad=1, hora=14)
         a_flex = alta_alumno(nombre_completo="E2E FlexCupo", tipo=TipoAlumno.ADULTO)
         a_reg = alta_alumno(nombre_completo="E2E RegCupo", tipo=TipoAlumno.ADULTO)
         pkg = comprar_paquete_flexi(
@@ -330,17 +351,22 @@ class Flujo7CuposConflictoRegularFlexi(E2EBase):
             metodo_codigo="efectivo",
             fecha_compra=date(2026, 8, 1),
         )
+        fecha = date(2026, 8, 7)
         reservar_flexi(
             paquete=pkg,
             horario=h,
-            fecha_clase=date(2026, 8, 7),
+            fecha_clase=fecha,
             ahora=self._aware(date(2026, 8, 2), time(9, 0)),
         )
+        self.assertEqual(CapacityService.cupo_disponible(h), 1)
+        self.assertEqual(
+            CapacityService.cupo_disponible(h, fecha_clase=fecha),
+            0,
+        )
+        alta_regular(
+            alumno=a_reg, horarios=[h], fecha_inicio=date(2026, 8, 1)
+        )
         self.assertEqual(CapacityService.cupo_disponible(h), 0)
-        with self.assertRaises(SinCupoError):
-            alta_regular(
-                alumno=a_reg, horarios=[h], fecha_inicio=date(2026, 8, 1)
-            )
 
 
 class Flujo8QuintaSemanaCobro(E2EBase):

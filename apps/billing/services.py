@@ -10,7 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.params.models import MetodoPagoCatalogo, ParametroVersion
-from apps.people.models import EstadoAlumno
+from apps.people.models import Alumno, EstadoAlumno
 from apps.regular.models import (
     AsignacionRegular,
     EstadoPeriodoCobro,
@@ -30,7 +30,7 @@ from .models import (
     Pago,
 )
 
-METODOS_MVP = frozenset({"efectivo", "transferencia"})
+METODOS_MVP = frozenset({"efectivo", "transferencia", "link"})
 
 
 def _hoy_local() -> date:
@@ -47,7 +47,7 @@ def _version(version: ParametroVersion | None = None) -> ParametroVersion:
 def _metodo_mvp(codigo: str) -> MetodoPagoCatalogo:
     if codigo not in METODOS_MVP:
         raise ValidationError(
-            f"Metodo no soportado en MVP: {codigo}. Use efectivo o transferencia."
+            f"Metodo no soportado en MVP: {codigo}. Use efectivo, transferencia o link."
         )
     metodo = MetodoPagoCatalogo.objects.filter(codigo=codigo, activo=True).first()
     if metodo is None:
@@ -89,12 +89,112 @@ def asegurar_linea_mensualidad(periodo: PeriodoCobroRegular) -> LineaCobro:
     }
     return LineaCobro.objects.create(
         periodo=periodo,
+        alumno=periodo.regular.alumno,
         concepto=ConceptoLinea.MENSUALIDAD,
         monto=periodo.monto,
         estado=EstadoLineaCobro.PENDIENTE,
         parametro_version=version,
         reglas_aplicadas=reglas,
     )
+
+
+def asegurar_linea_inscripcion(
+    *,
+    alumno: Alumno,
+    monto: Decimal,
+    inscripcion_id: int,
+    version: ParametroVersion | None = None,
+) -> LineaCobro:
+    """
+    Crea (idempotente) la línea de cuota de inscripción.
+    No importa enrollment: el vínculo es reglas_aplicadas['inscripcion_id'].
+    """
+    existente = LineaCobro.objects.filter(
+        alumno=alumno, concepto=ConceptoLinea.INSCRIPCION
+    ).first()
+    if existente:
+        return existente
+
+    v = _version(version)
+    if monto <= 0:
+        raise ValidationError("El monto de inscripción debe ser positivo.")
+
+    reglas = {
+        "origen": "inscripcion",
+        "inscripcion_id": inscripcion_id,
+        "alumno_id": alumno.pk,
+        "monto": str(monto),
+        "parametro_version_id": v.pk,
+    }
+    return LineaCobro.objects.create(
+        periodo=None,
+        alumno=alumno,
+        concepto=ConceptoLinea.INSCRIPCION,
+        monto=monto,
+        estado=EstadoLineaCobro.PENDIENTE,
+        parametro_version=v,
+        reglas_aplicadas=reglas,
+    )
+
+
+def linea_inscripcion_pendiente(alumno: Alumno) -> LineaCobro | None:
+    return LineaCobro.objects.filter(
+        alumno=alumno,
+        concepto=ConceptoLinea.INSCRIPCION,
+        estado=EstadoLineaCobro.PENDIENTE,
+    ).first()
+
+
+def inscripcion_pagada(alumno: Alumno) -> bool:
+    """Fuente de verdad: LineaCobro de inscripción en estado pagada."""
+    return LineaCobro.objects.filter(
+        alumno=alumno,
+        concepto=ConceptoLinea.INSCRIPCION,
+        estado=EstadoLineaCobro.PAGADA,
+    ).exists()
+
+
+@transaction.atomic
+def registrar_pago_inscripcion(
+    *,
+    alumno: Alumno,
+    metodo_codigo: str,
+    fecha_pago: date | None = None,
+    referencia: str = "",
+    notas: str = "",
+    version: ParametroVersion | None = None,
+) -> Pago:
+    """Paga la línea de inscripción pendiente (operación separada del alta)."""
+    fecha = fecha_pago or _hoy_local()
+    v = _version(version)
+    metodo = _metodo_mvp(metodo_codigo)
+
+    linea = linea_inscripcion_pendiente(alumno)
+    if linea is None:
+        raise ValidationError("No hay cuota de inscripción pendiente para este alumno.")
+
+    reglas = {
+        "origen": "inscripcion",
+        "fecha_pago": fecha.isoformat(),
+        "inscripcion_id": (linea.reglas_aplicadas or {}).get("inscripcion_id"),
+        "linea_id": linea.pk,
+        "parametro_version_id": v.pk,
+    }
+    pago = Pago.objects.create(
+        alumno=alumno,
+        metodo=metodo,
+        estado=EstadoPago.CONFIRMADO,
+        monto_total=linea.monto,
+        fecha_pago=fecha,
+        referencia=referencia,
+        notas=notas,
+        parametro_version=v,
+        reglas_aplicadas=reglas,
+    )
+    linea.estado = EstadoLineaCobro.PAGADA
+    linea.pago = pago
+    linea.save(update_fields=["estado", "pago", "updated_at"])
+    return pago
 
 
 def _crear_linea_recargo(
@@ -119,6 +219,7 @@ def _crear_linea_recargo(
     }
     return LineaCobro.objects.create(
         periodo=periodo,
+        alumno=periodo.regular.alumno,
         concepto=ConceptoLinea.RECARGO,
         monto=version.monto_recargo,
         estado=EstadoLineaCobro.PENDIENTE,

@@ -1,97 +1,70 @@
 {% extends "base.html" %}
-
 {% block title %}Excepciones{% endblock %}
-
 {% block content %}
-
 <div class="page-header">
-
   <h1>Excepciones</h1>
-
   <div class="page-actions">
-
     <a class="btn btn-primary" href="{% url 'excepcion_nueva' %}">Nueva solicitud</a>
-
   </div>
-
 </div>
+<p class="muted">
+  Recepción puede solicitar una excepción. Dirección autoriza o rechaza.
+  {% if es_direccion %}<strong>Estás en Dirección:</strong> usa Autorizar / Rechazar en pendientes.{% else %}Como Recepción solo puedes crear solicitudes.{% endif %}
+</p>
 
 <div class="panel">
-
   <div class="table-wrap">
-
     <table class="data-table">
-
       <thead>
-
-        <tr><th>Alumno</th><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Motivo</th><th>Estado</th><th>Acciones</th></tr>
-
-      </thead>
-
-      <tbody>
-
-        {% for e in excepciones %}
-
         <tr>
-
-          <td><a href="{% url 'alumno_detail' e.alumno_id %}">{{ e.alumno }}</a></td>
-
-          <td>{{ e.get_tipo_display }}</td>
-
-          <td>{{ e.fecha_inicio }}</td>
-
-          <td>{{ e.fecha_fin|default:"—" }}</td>
-
-          <td>{{ e.motivo }}</td>
-
-          <td>
-
-            {% if e.estado == "solicitada" %}
-
-            {% include "includes/badge.html" with label="Pendiente de Dirección" tone="solicitada" %}
-
-            {% else %}
-
-            {% include "includes/badge.html" with label=e.get_estado_display tone=e.estado %}
-
-            {% endif %}
-
-          </td>
-
-          <td>
-
-            {% if e.estado == "solicitada" and es_direccion %}
-
-            <form method="post" action="{% url 'excepcion_accion' e.id %}" class="inline-form">
-
-              {% csrf_token %}
-
-              <input class="form-input" name="notas" placeholder="Notas" style="width:auto;max-width:8rem;">
-
-              <button class="btn btn-sm btn-primary" name="accion" value="autorizar">Autorizar</button>
-
-              <button class="btn btn-sm btn-danger" name="accion" value="rechazar">Rechazar</button>
-
-            </form>
-
-            {% endif %}
-
-          </td>
-
+          <th>Alumno</th>
+          <th>Regla / motivo</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+          <th>Quién solicitó</th>
+          <th>Decisión</th>
+          <th>Acciones</th>
         </tr>
-
+      </thead>
+      <tbody>
+        {% for e in excepciones %}
+        <tr>
+          <td><a href="{% url 'alumno_detail' e.alumno_id %}">{{ e.alumno }}</a></td>
+          <td>{{ e.get_tipo_display }} — {{ e.motivo }}</td>
+          <td>{{ e.fecha_inicio }}{% if e.fecha_fin %} → {{ e.fecha_fin }}{% endif %}</td>
+          <td>
+            {% if e.estado == "solicitada" %}
+            {% include "includes/badge.html" with label="Pendiente de Dirección" tone="solicitada" %}
+            {% else %}
+            {% include "includes/badge.html" with label=e.get_estado_display tone=e.estado %}
+            {% endif %}
+          </td>
+          <td>
+            {% with h=e.historial.0 %}
+              {% if h and h.usuario_id %}usuario #{{ h.usuario_id }}{% else %}—{% endif %}
+            {% endwith %}
+          </td>
+          <td>
+            {% if e.autorizador %}{{ e.autorizador }} · {{ e.get_estado_display }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if e.estado == "solicitada" and es_direccion %}
+            <form method="post" action="{% url 'excepcion_accion' e.id %}" class="inline-form">
+              {% csrf_token %}
+              <input class="form-input" name="notas" placeholder="Notas" style="width:auto;max-width:8rem;">
+              <button class="btn btn-sm btn-primary" name="accion" value="autorizar">Autorizar</button>
+              <button class="btn btn-sm btn-danger" name="accion" value="rechazar">Rechazar</button>
+            </form>
+            {% elif e.estado == "solicitada" %}
+            <span class="muted">Espera decisión de Dirección</span>
+            {% endif %}
+          </td>
+        </tr>
         {% empty %}
-
         <tr><td colspan="7">Sin excepciones</td></tr>
-
         {% endfor %}
-
       </tbody>
-
     </table>
-
   </div>
-
 </div>
-
 {% endblock %}

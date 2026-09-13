@@ -12,7 +12,7 @@
 
   <title>{% block title %}Spirit Academia{% endblock %}</title>
 
-  <link rel="stylesheet" href="{% static 'css/spirit.css' %}">
+  <link rel="stylesheet" href="{% static 'css/spirit.css' %}?v=bwg2">
 
 </head>
 
@@ -28,7 +28,7 @@
 
       <div class="brand">
 
-        Spirit Academia
+        <img class="brand-logo" src="{% static 'img/logo-spirit-blanco.png' %}" alt="Spirit Academia">
 
         <small>{% if es_direccion %}Dirección{% elif es_recepcion %}Recepción{% else %}Operación{% endif %}</small>
 
@@ -71,6 +71,14 @@
       <header class="topbar">
 
         <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Menú">☰</button>
+
+        <div class="topbar-brand">
+
+          <img src="{% static 'img/logo-spirit.png' %}" alt="">
+
+          <span>Spirit Academia</span>
+
+        </div>
 
       </header>
 

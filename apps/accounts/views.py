@@ -8,6 +8,7 @@ from apps.accounts.roles import user_is_direccion, user_is_recepcion
 from apps.core.ui import (
     clases_hoy,
     flexi_proximos_vencer,
+    inscripciones_pendientes,
     periodos_pendientes_con_montos,
     total_monto_pendiente,
 )
@@ -40,6 +41,7 @@ def logout_view(request):
 @staff_operativo_required
 def home(request):
     pendientes = periodos_pendientes_con_montos(limit=15)
+    insc_pendientes = list(inscripciones_pendientes(limit=15))
     return render(
         request,
         "home.html",
@@ -49,6 +51,7 @@ def home(request):
             "hoy": timezone.localdate(),
             "clases_hoy": clases_hoy(),
             "pagos_pendientes": pendientes,
+            "inscripciones_pendientes": insc_pendientes,
             "total_pendiente": total_monto_pendiente(
                 [item["periodo"] for item in pendientes]
             ),

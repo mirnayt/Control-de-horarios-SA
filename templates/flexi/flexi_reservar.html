@@ -1,89 +1,62 @@
 {% extends "base.html" %}
-
 {% block title %}Reservar Flexi{% endblock %}
-
 {% block content %}
-
 <div class="page-header"><h1>Reservar Flexi</h1></div>
 
-<form method="post" class="form-card">
-
-  {% csrf_token %}
-
+<form method="get" id="form-flexi-filtro" class="form-card" style="margin-bottom:1rem;">
+  <p class="muted">Flujo: paquete vigente → fecha → horario de 180 min con cupo esa fecha.</p>
   <div class="form-group">
-
     <label class="form-label">Paquete</label>
-
-    <select class="form-input" name="paquete_id" required {% if not paquetes %}disabled{% endif %}>
-
+    <select class="form-input" name="paquete_id" id="paquete_id" {% if not paquetes %}disabled{% endif %}>
       {% if paquetes %}
-
+        <option value="">— Elegir paquete —</option>
         {% for p in paquetes %}
-
-        <option value="{{ p.id }}"{% if alumno_preseleccionado and p.alumno_id == alumno_preseleccionado %} selected{% endif %}>{{ p.alumno }} ({{ p.sesiones_disponibles }} ses., vigente hasta {{ p.fecha_fin }})</option>
-
+        <option value="{{ p.id }}"{% if paquete_sel_id == p.id or alumno_preseleccionado and p.alumno_id == alumno_preseleccionado and not paquete_sel_id %} selected{% endif %}>
+          {{ p.alumno }} ({{ p.sesiones_disponibles }} ses., {{ p.fecha_compra }} → {{ p.fecha_fin }})
+        </option>
         {% endfor %}
-
       {% else %}
-
         <option value="">— Sin paquetes disponibles —</option>
-
       {% endif %}
-
     </select>
-
   </div>
-
   {% if not paquetes %}
-
   {% include "includes/empty_hint.html" with mensaje="No hay paquetes Flexi activos con saldo y vigencia." accion_url="flexi_comprar" accion_texto="Comprar Flexi" %}
-
   {% endif %}
-
   <div class="form-group">
-
-    <label class="form-label">Horario</label>
-
-    <select class="form-input" name="horario_id" required {% if not horarios %}disabled{% endif %}>
-
-      {% if horarios %}
-
-        {% for h in horarios %}<option value="{{ h.id }}">{{ h }}</option>{% endfor %}
-
-      {% else %}
-
-        <option value="">— Sin horarios Flexi con cupo —</option>
-
-      {% endif %}
-
-    </select>
-
-  </div>
-
-  {% if not horarios %}
-
-  {% include "includes/empty_hint.html" with mensaje="No hay horarios Flexi activos con cupo." accion_url="horarios_list" accion_texto="Revisar horarios y cupos" %}
-
-  {% endif %}
-
-  <div class="form-group">
-
     <label class="form-label">Fecha clase</label>
-
-    <input class="form-input" type="date" name="fecha_clase" required {% if not paquetes or not horarios %}disabled{% endif %}>
-
+    <input class="form-input" type="date" name="fecha_clase" id="fecha_clase" value="{{ fecha_clase }}" required {% if not paquetes %}disabled{% endif %}>
   </div>
-
-  <div class="form-actions">
-
-    <button type="submit" class="btn-primary" {% if not paquetes or not horarios %}disabled{% endif %}>Reservar</button>
-
-  </div>
-
+  <button type="submit" class="btn" {% if not paquetes %}disabled{% endif %}>Ver horarios elegibles</button>
 </form>
 
+{% if fecha_clase %}
+<form method="post" class="form-card">
+  {% csrf_token %}
+  <input type="hidden" name="paquete_id" value="{{ paquete_sel_id }}">
+  <input type="hidden" name="fecha_clase" value="{{ fecha_clase }}">
+  <div class="form-group">
+    <label class="form-label">Horario (180 min, cupo del {{ fecha_clase }})</label>
+    <select class="form-input" name="horario_id" required {% if not horarios_filas or not paquete_sel_id %}disabled{% endif %}>
+      {% if horarios_filas and paquete_sel_id %}
+        {% for item in horarios_filas %}
+        <option value="{{ item.horario.id }}">{{ item.horario }} · cupo {{ item.cupo }}</option>
+        {% endfor %}
+      {% else %}
+        <option value="">— Sin horarios Flexi 180 min con cupo esa fecha —</option>
+      {% endif %}
+    </select>
+  </div>
+  {% if not paquete_sel_id %}
+  <p class="muted">Seleccione un paquete arriba y pulse «Ver horarios elegibles».</p>
+  {% elif not horarios_filas %}
+  {% include "includes/empty_hint.html" with mensaje="No hay horarios Flexi de 180 min con cupo para esa fecha." accion_url="horarios_list" accion_texto="Revisar horarios y cupos" %}
+  {% endif %}
+  <div class="form-actions">
+    <button type="submit" class="btn-primary" {% if not horarios_filas or not paquete_sel_id %}disabled{% endif %}>Reservar</button>
+  </div>
+</form>
+{% endif %}
+
 <p class="link-back"><a href="{% url 'flexi_list' %}">Volver</a></p>
-
 {% endblock %}
-
-
