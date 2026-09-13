@@ -1,4 +1,4 @@
-# Spirit Academia — Etapa 19 (portabilidad)
+# Spirit Academia — Etapa 19 (portabilidad) + Railway
 
 ## Setup limpio desde cero
 
@@ -16,37 +16,23 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env          # Windows: copy .env.example .env
 python manage.py migrate
-python manage.py seed_params
+python manage.py seed_operacion
+python manage.py create_ops_users
 ```
 
-SQLite por defecto (`DJANGO_USE_SQLITE=1` en `.env`). Postgres: `DJANGO_USE_SQLITE=0` + vars `POSTGRES_*`.
+SQLite por defecto (`DJANGO_USE_SQLITE=1` en `.env`). Postgres: `DJANGO_USE_SQLITE=0` + `DATABASE_URL` o vars `POSTGRES_*`.
 
 ### Crear usuarios operativos
 
 Login UI en `/login/` requiere grupo `recepcion` o `direccion` (grupos se crean en `migrate`).
 
 ```bash
-python manage.py shell
+python manage.py create_ops_users
+# o con contraseñas explícitas:
+# python manage.py create_ops_users --recepcion-password '...' --direccion-password '...' --reset-passwords
 ```
 
-```python
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
-from apps.accounts.roles import ROLE_RECEPCION, ROLE_DIRECCION, ensure_roles
-
-ensure_roles()
-User = get_user_model()
-
-u, _ = User.objects.get_or_create(username="recepcion")
-u.set_password("recepcion123")
-u.save()
-u.groups.set([Group.objects.get(name=ROLE_RECEPCION)])
-
-u, _ = User.objects.get_or_create(username="direccion")
-u.set_password("direccion123")
-u.save()
-u.groups.set([Group.objects.get(name=ROLE_DIRECCION)])
-```
+Por defecto crea `recepcion` / `direccion` (contraseñas `recepcion123` / `direccion123` si no defines `OPS_*_PASSWORD`).
 
 Opcional admin: `python manage.py createsuperuser` (superuser también pasa los checks de rol).
 
@@ -57,6 +43,39 @@ python manage.py runserver
 ```
 
 Abrir http://127.0.0.1:8000/login/
+
+## Despliegue Railway + PostgreSQL
+
+1. Crear servicio Web desde este repo (root: carpeta `spirit_academia` si el monorepo lo requiere).
+2. Añadir plugin **PostgreSQL** y vincularlo (inyecta `DATABASE_URL`).
+3. Variables de entorno del servicio:
+
+| Variable | Valor |
+|----------|--------|
+| `DJANGO_SECRET_KEY` | secreto fuerte |
+| `DJANGO_DEBUG` | `0` |
+| `DJANGO_USE_SQLITE` | `0` |
+| `DJANGO_ALLOWED_HOSTS` | `<servicio>.up.railway.app` (+ dominio custom) |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://<servicio>.up.railway.app` |
+| `OPS_RECEPCION_PASSWORD` | contraseña beta recepción |
+| `OPS_DIRECCION_PASSWORD` | contraseña beta dirección |
+
+`DATABASE_URL` viene del plugin. Si usas Postgres local sin SSL: `POSTGRES_SSL_REQUIRE=0`.
+
+4. Arranque y release (ya en `Procfile` / `railway.toml`):
+
+```bash
+# release
+python manage.py migrate --noinput
+python manage.py seed_operacion
+python manage.py create_ops_users
+python manage.py collectstatic --noinput
+
+# start
+gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+```
+
+Local sigue con SQLite + `runserver`; no subas `.env` ni `db.sqlite3`.
 
 ## Roles
 
@@ -106,11 +125,9 @@ E2E integral MVP: `apps.core.tests_e2e` (flujos 1–8).
 
 Solo se versiona `.env.example` (plantilla sin secretos reales).
 
-## Migración futura a PostgreSQL
+## Migración a PostgreSQL (local o servidor)
 
-El proyecto ya soporta Postgres vía variables de entorno; no requiere cambios de código.
-
-1. Instalar y levantar PostgreSQL (local o servidor).
+1. Instalar y levantar PostgreSQL.
 2. Crear base y usuario:
    ```sql
    CREATE USER spirit WITH PASSWORD 'spirit';
@@ -119,15 +136,17 @@ El proyecto ya soporta Postgres vía variables de entorno; no requiere cambios d
 3. En `.env`:
    ```
    DJANGO_USE_SQLITE=0
+   POSTGRES_SSL_REQUIRE=0
    POSTGRES_DB=spirit_academia
    POSTGRES_USER=spirit
    POSTGRES_PASSWORD=<tu-password>
    POSTGRES_HOST=localhost
    POSTGRES_PORT=5432
    ```
+   O bien: `DATABASE_URL=postgres://spirit:<password>@localhost:5432/spirit_academia`
 4. Aplicar esquema: `python manage.py migrate`
-5. Cargar datos iniciales: `python manage.py seed_params`
-6. Recrear usuarios operativos (ver arriba) o `createsuperuser`.
+5. Cargar operación: `python manage.py seed_operacion`
+6. Usuarios: `python manage.py create_ops_users` o `createsuperuser`.
 
 **Migrar datos existentes desde SQLite** (opcional, cuando haya datos reales):
 
@@ -150,16 +169,19 @@ Verificar: `python manage.py check` y suite de tests completa.
 - [ ] `copy .env.example .env` (Windows) o `cp .env.example .env`
 - [ ] Editar `.env`: `DJANGO_SECRET_KEY` único, `DJANGO_DEBUG=1` en dev
 - [ ] `python manage.py migrate`
-- [ ] `python manage.py seed_params`
-- [ ] Crear usuarios recepción / dirección (shell arriba)
+- [ ] `python manage.py seed_operacion`
+- [ ] `python manage.py create_ops_users`
 - [ ] `python manage.py runserver` → probar `/login/`
 - [ ] `python manage.py test apps.accounts apps.params apps.catalog apps.scheduling apps.people apps.enrollment apps.regular apps.billing apps.flexi apps.attendance apps.exceptions_ops apps.core`
-- [ ] (Prod) `DJANGO_USE_SQLITE=0`, Postgres configurado, `DJANGO_DEBUG=0`, `ALLOWED_HOSTS` correcto
+- [ ] (Prod / Railway) `DJANGO_USE_SQLITE=0`, `DATABASE_URL`, `DJANGO_DEBUG=0`, `ALLOWED_HOSTS` + `CSRF_TRUSTED_ORIGINS`
 
 ## requirements.txt
 
 | Paquete | Uso |
 |---------|-----|
 | `Django>=5.0,<6` | framework web |
-| `psycopg2-binary>=2.9` | driver PostgreSQL (listo para migración) |
+| `psycopg2-binary>=2.9` | driver PostgreSQL |
 | `python-dotenv>=1.0` | carga de `.env` |
+| `gunicorn>=22.0` | servidor WSGI (Railway) |
+| `whitenoise>=6.6` | estáticos en producción |
+| `dj-database-url>=2.2` | parsea `DATABASE_URL` (Railway) |
