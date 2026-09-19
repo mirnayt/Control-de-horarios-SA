@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import EjecucionCobranza, LineaCobro, Pago
+from .models import EjecucionCobranza, LineaCobro, Pago, PagoAplicacion
 
 
 class LineaCobroInline(admin.TabularInline):
@@ -18,6 +18,13 @@ class LineaCobroInline(admin.TabularInline):
     can_delete = False
 
 
+class PagoAplicacionInline(admin.TabularInline):
+    model = PagoAplicacion
+    extra = 0
+    readonly_fields = ("linea", "monto", "created_at")
+    can_delete = False
+
+
 @admin.register(Pago)
 class PagoAdmin(admin.ModelAdmin):
     list_display = (
@@ -27,14 +34,17 @@ class PagoAdmin(admin.ModelAdmin):
         "metodo",
         "estado",
         "fecha_pago",
+        "requiere_factura",
     )
-    list_filter = ("estado", "metodo", "fecha_pago")
+    list_filter = ("estado", "metodo", "fecha_pago", "requiere_factura")
     search_fields = ("alumno__nombre_completo", "referencia")
     raw_id_fields = ("alumno", "metodo", "parametro_version")
     readonly_fields = (
         "alumno",
         "metodo",
         "monto_total",
+        "monto_base",
+        "monto_iva",
         "fecha_pago",
         "parametro_version",
         "reglas_aplicadas",
@@ -42,18 +52,18 @@ class PagoAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
-    inlines = [LineaCobroInline]
+    inlines = [PagoAplicacionInline, LineaCobroInline]
 
 
 @admin.register(LineaCobro)
 class LineaCobroAdmin(admin.ModelAdmin):
     list_display = ("periodo", "concepto", "monto", "estado", "pago")
     list_filter = ("concepto", "estado")
-    raw_id_fields = ("periodo", "pago", "parametro_version")
+    raw_id_fields = ("periodo", "pago", "parametro_version", "alumno")
     readonly_fields = (
         "periodo",
         "concepto",
-        "monto",
+        "monto_calculado",
         "parametro_version",
         "reglas_aplicadas",
         "created_at",

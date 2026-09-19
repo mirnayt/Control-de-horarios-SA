@@ -47,6 +47,10 @@ def flexi_list(request):
 @require_http_methods(["GET", "POST"])
 def flexi_comprar(request):
     alumnos = alumnos_flexi_compra()
+    alumno_sel = None
+    pre = alumno_id_preseleccionado(request)
+    if pre:
+        alumno_sel = alumnos.filter(pk=pre).first()
     if request.method == "POST":
         try:
             alumno = alumnos.get(pk=request.POST.get("alumno_id"))
@@ -62,6 +66,7 @@ def flexi_comprar(request):
             messages.error(request, mensaje_error_operacion(e))
     return render(request, "flexi/flexi_comprar.html", {
         "alumnos": alumnos,
+        "alumno_sel": alumno_sel,
         "alumno_preseleccionado": alumno_id_preseleccionado(request),
         "metodos": METODOS_PAGO_UI,
     })

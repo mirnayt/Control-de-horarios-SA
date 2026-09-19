@@ -2,11 +2,13 @@ from datetime import date
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from apps.accounts.decorators import staff_operativo_required
-from apps.core.ui import buscar_alumnos, contexto_ficha_alumno, mensaje_error_operacion
+from apps.catalog.models import Sucursal
+from apps.core.ui import buscar_alumnos, contexto_ficha_alumno, mensaje_error_operacion, serializar_alumno
 from apps.enrollment.services import alta_alumno, reactivar_alumno
 from apps.people.models import Alumno, EstadoAlumno, TipoAlumno, Tutor
 from apps.people.services import marcar_baja
@@ -14,7 +16,7 @@ from apps.people.services import marcar_baja
 
 @staff_operativo_required
 def alumnos_list(request):
-    qs = Alumno.objects.all().select_related("tutor")
+    qs = Alumno.objects.all().select_related("tutor", "sucursal")
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = buscar_alumnos(q, qs=qs)
@@ -39,6 +41,23 @@ def alumnos_list(request):
 
 
 @staff_operativo_required
+def alumnos_buscar(request):
+    q = (request.GET.get("q") or "").strip()
+    activos = (request.GET.get("activos") or "") == "1"
+    adultos = (request.GET.get("adultos") or "") == "1"
+    qs = Alumno.objects.select_related("sucursal", "tutor")
+    if activos:
+        qs = qs.filter(estado=EstadoAlumno.ACTIVO)
+    if adultos:
+        qs = qs.filter(tipo=TipoAlumno.ADULTO)
+    if q:
+        qs = buscar_alumnos(q, qs=qs)
+    else:
+        qs = qs.none()
+    return JsonResponse({"results": [serializar_alumno(a) for a in qs[:15]]})
+
+
+@staff_operativo_required
 @require_http_methods(["GET", "POST"])
 def alumno_alta(request):
     if request.method == "POST":
@@ -58,6 +77,10 @@ def alumno_alta(request):
                 )
             fn_raw = (request.POST.get("fecha_nacimiento") or "").strip()
             fecha_nacimiento = date.fromisoformat(fn_raw) if fn_raw else None
+            sucursal_id = (request.POST.get("sucursal_id") or "").strip()
+            sucursal = None
+            if sucursal_id.isdigit():
+                sucursal = Sucursal.objects.filter(pk=int(sucursal_id), activo=True).first()
             alumno = alta_alumno(
                 nombre_completo=request.POST.get("nombre_completo", ""),
                 tipo=tipo,
@@ -66,6 +89,9 @@ def alumno_alta(request):
                 telefono=request.POST.get("telefono", ""),
                 whatsapp=request.POST.get("whatsapp", ""),
                 tutor=tutor,
+                sucursal=sucursal,
+                requiere_factura=request.POST.get("requiere_factura") == "1",
+                pack_intro=request.POST.get("pack_intro") == "1",
             )
             messages.success(request, f"Alumno creado: {alumno}")
             return redirect("alumno_detail", pk=alumno.pk)
@@ -74,7 +100,10 @@ def alumno_alta(request):
     return render(
         request,
         "people/alumno_alta.html",
-        {"tipos": TipoAlumno.choices},
+        {
+            "tipos": TipoAlumno.choices,
+            "sucursales": Sucursal.objects.filter(activo=True).order_by("nombre"),
+        },
     )
 
 

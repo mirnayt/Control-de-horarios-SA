@@ -70,6 +70,7 @@
             <form method="post" action="{% url 'asistencia_accion' a.id %}" class="inline-form">
               {% csrf_token %}
               <button class="btn btn-sm btn-primary" name="accion" value="asistio">Asistió</button>
+              <button class="btn btn-sm" name="accion" value="aviso">Avisó falta</button>
               <button class="btn btn-sm" name="accion" value="ausente">Ausente</button>
               <button class="btn btn-sm btn-danger" name="accion" value="spirit">Cancelar Spirit</button>
             </form>

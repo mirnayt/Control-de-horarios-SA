@@ -2,7 +2,6 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -13,8 +12,10 @@ from apps.billing.services import (
     linea_inscripcion_pendiente,
     lineas_pendientes,
     monto_pendiente,
+    pagado_linea,
     registrar_pago_inscripcion,
     registrar_pago_periodo,
+    saldo_linea,
 )
 from apps.core.ui import (
     METODOS_PAGO_UI,
@@ -35,25 +36,25 @@ def _cargos_alumno(alumno: Alumno) -> dict:
         "regular"
     ).order_by("-anio", "-mes"):
         lineas = lineas_pendientes(periodo)
-        esperado = sum((ln.monto for ln in lineas), Decimal("0.00"))
-        pagado = (
-            LineaCobro.objects.filter(
-                periodo=periodo, estado=EstadoLineaCobro.PAGADA
-            ).aggregate(t=Sum("monto"))["t"]
-            or Decimal("0.00")
+        todas = list(
+            LineaCobro.objects.filter(periodo=periodo).exclude(
+                estado=EstadoLineaCobro.CANCELADA
+            )
         )
+        esperado = sum((ln.monto for ln in todas), Decimal("0.00"))
+        pagado = sum((pagado_linea(ln) for ln in todas), Decimal("0.00"))
         periodos.append(
             {
                 "periodo": periodo,
                 "lineas": lineas,
-                "esperado": esperado + pagado,
+                "esperado": esperado,
                 "pagado": pagado,
                 "saldo": monto_pendiente(periodo),
             }
         )
     otras = LineaCobro.objects.filter(
         alumno=alumno,
-        estado=EstadoLineaCobro.PENDIENTE,
+        estado__in=(EstadoLineaCobro.PENDIENTE, EstadoLineaCobro.PARCIAL),
         periodo__isnull=True,
     ).exclude(concepto="inscripcion")
     return {
@@ -96,6 +97,7 @@ def pagos_list(request):
             "resultados": resultados,
             "cargos": cargos,
             "metodos": METODOS_PAGO_UI,
+            "pagos_url": reverse("pagos_list"),
         },
     )
 
@@ -109,24 +111,26 @@ def pago_periodo(request, periodo_id):
     )
     if request.method == "POST":
         try:
+            monto_raw = (request.POST.get("monto") or "").strip()
+            override_raw = (request.POST.get("monto_override") or "").strip()
             pago = registrar_pago_periodo(
                 periodo=periodo,
                 metodo_codigo=request.POST.get("metodo_codigo", ""),
                 referencia=request.POST.get("referencia", ""),
                 notas=request.POST.get("notas", ""),
+                monto=Decimal(monto_raw) if monto_raw else None,
+                monto_override=Decimal(override_raw) if override_raw else None,
+                motivo_ajuste=request.POST.get("motivo_ajuste", ""),
+                requiere_factura=request.POST.get("requiere_factura") == "1",
+                usuario=request.user,
             )
             messages.success(request, f"Pago registrado: ${pago.monto_total}")
-            return redirect("pagos_list")
+            return redirect(f"{reverse('pagos_list')}?alumno_id={periodo.regular.alumno_id}")
         except ValidationError as e:
             messages.error(request, mensaje_error_operacion(e))
     lineas = lineas_pendientes(periodo)
     saldo = monto_pendiente(periodo)
-    pagado = (
-        LineaCobro.objects.filter(
-            periodo=periodo, estado=EstadoLineaCobro.PAGADA
-        ).aggregate(t=Sum("monto"))["t"]
-        or Decimal("0.00")
-    )
+    pagado = sum((pagado_linea(ln) for ln in LineaCobro.objects.filter(periodo=periodo)), Decimal("0.00"))
     return render(
         request,
         "billing/pago_periodo.html",
@@ -138,6 +142,7 @@ def pago_periodo(request, periodo_id):
             "pagado": pagado,
             "saldo": saldo,
             "metodos": METODOS_PAGO_UI,
+            "requiere_factura": periodo.regular.alumno.requiere_factura,
         },
     )
 
@@ -157,6 +162,11 @@ def pago_inscripcion(request, alumno_id):
                 metodo_codigo=request.POST.get("metodo_codigo", ""),
                 referencia=request.POST.get("referencia", ""),
                 notas=request.POST.get("notas", ""),
+                monto=Decimal(monto_raw) if (monto_raw := (request.POST.get("monto") or "").strip()) else None,
+                monto_override=Decimal(override_raw) if (override_raw := (request.POST.get("monto_override") or "").strip()) else None,
+                motivo_ajuste=request.POST.get("motivo_ajuste", ""),
+                requiere_factura=request.POST.get("requiere_factura") == "1",
+                usuario=request.user,
             )
             messages.success(request, f"Inscripción pagada: ${pago.monto_total}")
             return redirect(f"{reverse('pagos_list')}?alumno_id={alumno.pk}")
@@ -169,5 +179,7 @@ def pago_inscripcion(request, alumno_id):
             "alumno": alumno,
             "linea": linea,
             "metodos": METODOS_PAGO_UI,
+            "saldo": saldo_linea(linea),
+            "requiere_factura": alumno.requiere_factura,
         },
     )

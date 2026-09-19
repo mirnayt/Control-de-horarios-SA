@@ -50,6 +50,17 @@ def buscar_alumnos(q: str, *, qs: QuerySet[Alumno] | None = None) -> QuerySet[Al
     return base.filter(filtros).distinct().order_by("nombre_completo")
 
 
+def serializar_alumno(alumno: Alumno) -> dict:
+    sucursal = getattr(alumno, "sucursal", None)
+    return {
+        "id": alumno.pk,
+        "text": alumno.nombre_completo,
+        "tipo": alumno.clasificacion,
+        "telefono": alumno.telefono or alumno.whatsapp or "",
+        "sucursal": sucursal.nombre if sucursal else "",
+    }
+
+
 def sesiones_reservadas_paquete(paquete: PaqueteFlexi) -> int:
     total = (
         ReservaFlexi.objects.filter(
@@ -145,7 +156,7 @@ def horarios_con_cupo(
     duracion_minutos: int | None = None,
 ) -> list[Horario]:
     """Horarios activos, de la modalidad indicada, con cupo y compatibles con el alumno."""
-    qs = Horario.objects.filter(activo=True).select_related("salon", "profesor")
+    qs = Horario.objects.filter(activo=True).select_related("salon", "salon__sucursal", "profesor")
     resultado: list[Horario] = []
     for h in qs:
         if modalidad not in (h.modalidades or []):

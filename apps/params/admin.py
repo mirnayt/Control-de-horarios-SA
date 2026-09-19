@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import BloqueTarifaAdulto, MetodoPagoCatalogo, ParametroVersion, VigenciaFlexi
+from .models import (
+    BloqueTarifaAdulto,
+    MetodoPagoCatalogo,
+    ParametroVersion,
+    TarifaSucursal,
+    VigenciaFlexi,
+)
 
 
 class BloqueTarifaAdultoInline(admin.TabularInline):
@@ -10,6 +16,11 @@ class BloqueTarifaAdultoInline(admin.TabularInline):
 
 class VigenciaFlexiInline(admin.TabularInline):
     model = VigenciaFlexi
+    extra = 0
+
+
+class TarifaSucursalInline(admin.TabularInline):
+    model = TarifaSucursal
     extra = 0
 
 
@@ -24,7 +35,7 @@ class ParametroVersionAdmin(admin.ModelAdmin):
         "flexi_max_sesiones",
         "sabado_adulto_sin_descuento_progresivo",
     )
-    inlines = [BloqueTarifaAdultoInline, VigenciaFlexiInline]
+    inlines = [BloqueTarifaAdultoInline, VigenciaFlexiInline, TarifaSucursalInline]
 
 
 @admin.register(MetodoPagoCatalogo)

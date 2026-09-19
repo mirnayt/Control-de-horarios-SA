@@ -35,6 +35,9 @@ def alta_alumno(
     fecha_nacimiento: date | None = None,
     telefono: str = "",
     whatsapp: str = "",
+    sucursal=None,
+    requiere_factura: bool = False,
+    pack_intro: bool = False,
 ) -> Alumno:
     """
     Alta de alumno con inscripción única y cargo de cuota en billing.
@@ -52,6 +55,8 @@ def alta_alumno(
         fecha_nacimiento=fecha_nacimiento,
         telefono=(telefono or "").strip(),
         whatsapp=(whatsapp or "").strip(),
+        sucursal=sucursal,
+        requiere_factura=bool(requiere_factura),
     )
     alumno.full_clean()
     alumno.save()
@@ -77,6 +82,10 @@ def alta_alumno(
         inscripcion_id=insc.pk,
         version=version,
     )
+    if pack_intro:
+        from apps.billing.services import crear_pack_intro_iztacalco
+
+        crear_pack_intro_iztacalco(alumno=alumno)
     return alumno
 
 

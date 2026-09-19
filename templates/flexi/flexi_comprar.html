@@ -6,13 +6,7 @@
   {% csrf_token %}
   <div class="form-group">
     <label class="form-label">Alumno</label>
-    <select class="form-input" name="alumno_id" required {% if not alumnos %}disabled{% endif %}>
-      {% if alumnos %}
-        {% for a in alumnos %}<option value="{{ a.id }}"{% if alumno_preseleccionado == a.id %} selected{% endif %}>{{ a }}</option>{% endfor %}
-      {% else %}
-        <option value="">— Sin alumnos adultos activos —</option>
-      {% endif %}
-    </select>
+    {% include "includes/alumno_autocomplete.html" with selected=alumno_sel adultos="1" activos="1" placeholder="Buscar adulto activo" %}
   </div>
   {% if not alumnos %}
   {% include "includes/empty_hint.html" with mensaje="No hay alumnos adultos activos para comprar Flexi." accion_url="alumno_alta" accion_texto="Dar de alta un alumno" %}

@@ -18,6 +18,19 @@
 <form method="post" class="form-card">
   {% csrf_token %}
   <div class="form-group">
+    <label class="form-label">Monto a cobrar (abono)</label>
+    <input class="form-input" type="number" step="0.01" min="0.01" name="monto" value="{{ saldo }}" required>
+    <p class="muted">Puede registrar un abono menor al saldo.</p>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Ajustar cargo (opcional)</label>
+    <input class="form-input" type="number" step="0.01" min="0.01" name="monto_override" placeholder="Nuevo monto de mensualidad">
+    <input class="form-input" name="motivo_ajuste" placeholder="Motivo del ajuste" style="margin-top:.4rem;">
+  </div>
+  <div class="form-group checkbox-group">
+    <label><input type="checkbox" name="requiere_factura" value="1"{% if requiere_factura %} checked{% endif %}> Requiere factura (se agrega IVA)</label>
+  </div>
+  <div class="form-group">
     <label class="form-label">Método</label>
     <select class="form-input" name="metodo_codigo">
       {% for codigo, nombre in metodos %}

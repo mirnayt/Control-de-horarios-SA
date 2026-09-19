@@ -16,7 +16,9 @@ from apps.attendance.models import (
     TipoCompensacion,
 )
 from apps.attendance.services import (
+    agendar_reposicion,
     autorizar_reembolso,
+    avisar_falta_alumno,
     cancelar_por_spirit,
     marcar_asistio,
     marcar_ausente_alumno,
@@ -288,3 +290,73 @@ class FlexiSinDobleConsumoTests(AttendanceBaseTestCase):
         self.assertEqual(pkg.sesiones_consumidas, 0)
         self.assertEqual(reserva.estado, EstadoReservaFlexi.CANCELADA)
         self.assertEqual(asist.estado, EstadoAsistencia.PENDIENTE_COMPENSACION)
+
+
+class AvisoYReposicionTests(AttendanceBaseTestCase):
+    def test_aviso_anticipado_genera_compensacion(self):
+        from datetime import timedelta
+
+        alumno = alta_alumno(nombre_completo="Aviso1", tipo=TipoAlumno.ADULTO)
+        h = self._horario(DiaSemana.MARTES)
+        reg = alta_regular(
+            alumno=alumno, horarios=[h], fecha_inicio=date(2026, 8, 1)
+        )
+        asig = reg.asignaciones.get(activa=True)
+        hoy = timezone.localdate()
+        delta = (int(h.dia) - hoy.weekday()) % 7
+        if delta == 0:
+            delta = 7
+        fecha = hoy + timedelta(days=delta)
+        asist = programar_asistencia_regular(asignacion=asig, fecha=fecha)
+        avisar_falta_alumno(asist, usuario=self.recepcion)
+        asist.refresh_from_db()
+        self.assertEqual(asist.estado, EstadoAsistencia.PENDIENTE_COMPENSACION)
+        self.assertTrue(Compensacion.objects.filter(asistencia=asist).exists())
+
+    def test_reposicion_otra_sucursal_cobra_diferencia(self):
+        from apps.billing.models import ConceptoLinea, LineaCobro
+        from apps.catalog.models import Sucursal
+
+        izt = Sucursal.objects.get(codigo="iztacalco")
+        dv = Sucursal.objects.get(codigo="del_valle")
+        self.salon.sucursal = izt
+        self.salon.save()
+        salon_dv = Salon.objects.create(nombre="DV", sucursal=dv)
+        alumno = alta_alumno(
+            nombre_completo="Cruce", tipo=TipoAlumno.ADULTO, sucursal=izt
+        )
+        h_izt = self._horario(DiaSemana.MARTES, duracion=120)
+        h_dv = Horario.objects.create(
+            dia=DiaSemana.MIERCOLES,
+            hora_inicio=time(16, 0),
+            hora_fin=time(19, 0),
+            duracion_minutos=180,
+            capacidad=8,
+            tipo_alumno=TipoHorario.ADULTO,
+            modalidades=[Modalidad.REGULAR, Modalidad.FLEXI],
+            activo=True,
+            salon=salon_dv,
+            profesor=self.profesor,
+        )
+        reg = alta_regular(
+            alumno=alumno, horarios=[h_izt], fecha_inicio=date(2026, 8, 1)
+        )
+        asig = reg.asignaciones.get(activa=True)
+        asist = programar_asistencia_regular(
+            asignacion=asig, fecha=date(2026, 8, 4)
+        )
+        asist, comp = cancelar_por_spirit(asist, usuario=self.recepcion)
+        agendar_reposicion(
+            comp,
+            horario=h_dv,
+            fecha=date(2026, 8, 5),
+            usuario=self.recepcion,
+        )
+        comp.refresh_from_db()
+        self.assertEqual(comp.estado, EstadoCompensacion.AGENDADA)
+        self.assertGreater(comp.monto_diferencia, Decimal("0.00"))
+        self.assertTrue(
+            LineaCobro.objects.filter(
+                alumno=alumno, concepto=ConceptoLinea.DIFERENCIA_REPOSICION
+            ).exists()
+        )

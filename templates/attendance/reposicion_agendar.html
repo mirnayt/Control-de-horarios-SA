@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Agendar reposición{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Agendar reposición</h1>
+  <p>
+    <a href="{% url 'alumno_detail' compensacion.asistencia.alumno_id %}">{{ compensacion.asistencia.alumno }}</a>
+    · origen {{ compensacion.asistencia.fecha }} {{ compensacion.asistencia.horario }}
+    {% if compensacion.asistencia.horario.salon.sucursal %}
+      ({{ compensacion.asistencia.horario.salon.sucursal }})
+    {% endif %}
+  </p>
+  <p class="muted">{{ compensacion.get_motivo_display }}</p>
+</div>
+
+<form method="get" class="form-card" style="margin-bottom:1rem;">
+  <div class="form-group">
+    <label class="form-label">Fecha de reposición</label>
+    <input class="form-input" type="date" name="fecha" value="{{ fecha }}" required>
+  </div>
+  <button type="submit" class="btn">Ver horarios con cupo</button>
+</form>
+
+{% if fecha %}
+<form method="post" class="form-card">
+  {% csrf_token %}
+  <input type="hidden" name="fecha" value="{{ fecha }}">
+  <div class="form-group">
+    <label class="form-label">Horario (puede ser otra sucursal)</label>
+    <select class="form-input" name="horario_id" required {% if not horarios %}disabled{% endif %}>
+      {% for item in horarios %}
+      <option value="{{ item.horario.id }}">
+        {{ item.horario }}
+        {% if item.horario.salon.sucursal %} · {{ item.horario.salon.sucursal }}{% endif %}
+        (cupo {{ item.cupo }})
+      </option>
+      {% empty %}
+      <option value="">— Sin horarios con cupo ese día —</option>
+      {% endfor %}
+    </select>
+    <p class="muted">Si la sucursal o la duración cambian, se genera un cargo por la diferencia.</p>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn-primary" {% if not horarios %}disabled{% endif %}>Agendar</button>
+  </div>
+</form>
+{% endif %}
+<p class="link-back"><a href="{% url 'compensaciones_list' %}">Volver</a></p>
+{% endblock %}

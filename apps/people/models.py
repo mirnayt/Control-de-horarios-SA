@@ -47,6 +47,17 @@ class Alumno(TimeStampedModel):
         choices=EstadoAlumno.choices,
         default=EstadoAlumno.ACTIVO,
     )
+    sucursal = models.ForeignKey(
+        "catalog.Sucursal",
+        on_delete=models.PROTECT,
+        related_name="alumnos",
+        null=True,
+        blank=True,
+    )
+    requiere_factura = models.BooleanField(
+        default=False,
+        help_text="Si True, los cobros ofrecen IVA para factura.",
+    )
     fecha_nacimiento = models.DateField(null=True, blank=True)
     telefono = models.CharField(max_length=32, blank=True)
     whatsapp = models.CharField(max_length=32, blank=True)

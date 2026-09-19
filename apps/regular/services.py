@@ -146,8 +146,22 @@ def calcular_monto_regular(
 
     horas_total = horas_semana + horas_sabado
     tipo = regular.alumno.tipo
+    sucursal = regular.sucursal or getattr(regular.alumno, "sucursal", None)
+    plan_horas = regular.plan_horas_semana
+    if plan_horas is None and asig:
+        minutos = sum(int(a.horario.duracion_minutos) for a in asig)
+        plan_horas = int(round(minutos / 60)) if minutos else None
 
-    if tipo == TipoAlumno.ADULTO:
+    codigo_tarifa = regular.codigo_tarifa or ""
+    plan = PricingService.monto_plan_sucursal(
+        sucursal=sucursal,
+        horas_semana_plan=plan_horas,
+        es_tarifa_fundadora=regular.es_tarifa_fundadora,
+        version=v,
+    )
+    if plan is not None:
+        monto, codigo_tarifa = plan
+    elif tipo == TipoAlumno.ADULTO:
         monto = PricingService.monto_regular_adulto_mixto(
             horas_semana=horas_semana,
             horas_sabado=horas_sabado,
@@ -191,6 +205,11 @@ def calcular_monto_regular(
             "horas_sabado": str(horas_sabado.quantize(Decimal("0.01"))),
             "horas_total": str(horas_total.quantize(Decimal("0.01"))),
             "monto": str(monto),
+            "sucursal_id": sucursal.pk if sucursal else None,
+            "sucursal_codigo": getattr(sucursal, "codigo", None),
+            "plan_horas_semana": plan_horas,
+            "codigo_tarifa": codigo_tarifa,
+            "es_tarifa_fundadora": regular.es_tarifa_fundadora,
         },
     }
 
@@ -203,6 +222,7 @@ def alta_regular(
     fecha_inicio: date | None = None,
     notas: str = "",
     crear_periodo: bool = True,
+    es_tarifa_fundadora: bool = False,
 ) -> Regular:
     """
     Alta Regular a 1, 2 o 3 horarios fijos.
@@ -220,8 +240,24 @@ def alta_regular(
     if version is None:
         raise ValidationError("No hay versión de parámetros vigente.")
 
+    minutos_semana = sum(int(h.duracion_minutos) for h in horarios)
+    plan_horas = int(round(minutos_semana / 60)) if minutos_semana else None
+    sucursal = alumno.sucursal
+    if sucursal is None:
+        sucs = {
+            getattr(h.salon, "sucursal_id", None)
+            for h in horarios
+            if getattr(h.salon, "sucursal_id", None)
+        }
+        if len(sucs) == 1:
+            sucursal = next(h.salon.sucursal for h in horarios if h.salon.sucursal_id)
+
     regular = Regular.objects.create(
         alumno=alumno,
+        sucursal=sucursal,
+        plan_horas_semana=plan_horas,
+        es_tarifa_fundadora=es_tarifa_fundadora,
+        codigo_tarifa="",
         fecha_inicio=fecha,
         estado=EstadoRegular.ACTIVO,
         notas=notas,
@@ -236,6 +272,17 @@ def alta_regular(
             activa=True,
             fecha_inicio=fecha,
         )
+
+    if sucursal is not None:
+        plan = PricingService.monto_plan_sucursal(
+            sucursal=sucursal,
+            horas_semana_plan=plan_horas,
+            es_tarifa_fundadora=es_tarifa_fundadora,
+            version=version,
+        )
+        if plan:
+            regular.codigo_tarifa = plan[1]
+            regular.save(update_fields=["codigo_tarifa", "updated_at"])
 
     if crear_periodo:
         generar_periodo_cobro(regular, fecha.year, fecha.month, version=version)

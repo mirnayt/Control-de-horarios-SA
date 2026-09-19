@@ -314,3 +314,51 @@ class InscripcionBillingTests(BillingBaseTestCase):
 
         with self.assertRaises(ValidationError):
             registrar_pago_inscripcion(alumno=alumno, metodo_codigo="efectivo")
+
+
+class AbonoEIvaTests(BillingBaseTestCase):
+    def test_abono_parcial_deja_saldo(self):
+        from apps.billing.services import saldo_linea
+        from apps.regular.models import EstadoPeriodoCobro
+
+        _, _, _, periodo = self._alta()
+        total = periodo.monto
+        abono = (total / 2).quantize(Decimal("0.01"))
+        pago = registrar_pago_periodo(
+            periodo=periodo,
+            metodo_codigo="efectivo",
+            fecha_pago=date(2026, 8, 3),
+            monto=abono,
+        )
+        periodo.refresh_from_db()
+        self.assertEqual(pago.monto_total, abono)
+        self.assertEqual(periodo.estado, EstadoPeriodoCobro.PARCIAL)
+        linea = LineaCobro.objects.get(
+            periodo=periodo, concepto=ConceptoLinea.MENSUALIDAD
+        )
+        self.assertEqual(linea.estado, EstadoLineaCobro.PARCIAL)
+        self.assertEqual(saldo_linea(linea), total - abono)
+
+        registrar_pago_periodo(
+            periodo=periodo,
+            metodo_codigo="efectivo",
+            fecha_pago=date(2026, 8, 4),
+        )
+        periodo.refresh_from_db()
+        linea.refresh_from_db()
+        self.assertEqual(periodo.estado, EstadoPeriodoCobro.PAGADO_A_TIEMPO)
+        self.assertEqual(linea.estado, EstadoLineaCobro.PAGADA)
+        self.assertEqual(saldo_linea(linea), Decimal("0.00"))
+
+    def test_factura_agrega_iva(self):
+        _, _, _, periodo = self._alta()
+        pago = registrar_pago_periodo(
+            periodo=periodo,
+            metodo_codigo="efectivo",
+            fecha_pago=date(2026, 8, 3),
+            requiere_factura=True,
+        )
+        self.assertTrue(pago.requiere_factura)
+        self.assertEqual(pago.monto_base, periodo.monto)
+        self.assertGreater(pago.monto_iva, Decimal("0.00"))
+        self.assertEqual(pago.monto_total, pago.monto_base + pago.monto_iva)

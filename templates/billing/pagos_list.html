@@ -5,31 +5,10 @@
 
 <section class="panel">
   <h2>Localizar alumno</h2>
-  <form method="get" class="inline-form search-form">
-    <input class="form-input" type="search" name="q" value="{{ q }}" placeholder="Nombre, ID o teléfono" style="max-width:16rem;">
-    <button type="submit" class="btn btn-primary">Buscar</button>
-    {% if q or alumno %}<a class="btn" href="{% url 'pagos_list' %}">Limpiar</a>{% endif %}
+  <form method="get" class="inline-form search-form" action="{% url 'pagos_list' %}">
+    {% include "includes/alumno_autocomplete.html" with selected=alumno navigate_url=pagos_url placeholder="Nombre, ID o teléfono" %}
+    {% if alumno %}<a class="btn" href="{% url 'pagos_list' %}">Limpiar</a>{% endif %}
   </form>
-
-  {% if resultados %}
-  <div class="table-wrap" style="margin-top:1rem;">
-    <table class="data-table">
-      <thead><tr><th>ID</th><th>Nombre</th><th>Teléfono</th><th></th></tr></thead>
-      <tbody>
-        {% for a in resultados %}
-        <tr>
-          <td>{{ a.id }}</td>
-          <td>{{ a.nombre_completo }}</td>
-          <td>{{ a.telefono|default:a.whatsapp|default:"—" }}</td>
-          <td><a class="btn btn-sm btn-primary" href="{% url 'pagos_list' %}?alumno_id={{ a.id }}">Ver cargos</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% elif q and not alumno %}
-  <p class="muted">Sin resultados para «{{ q }}».</p>
-  {% endif %}
 
   {% if alumno and cargos %}
   <h3 style="margin-top:1.25rem;">

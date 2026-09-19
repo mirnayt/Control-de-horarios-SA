@@ -133,6 +133,30 @@ class CapacityService:
             fecha_clase=fecha_clase,
         ).count()
 
+    @staticmethod
+    def count_reposiciones(horario, fecha_clase: date | None = None) -> int:
+        """Reposiciones puntuales que no son el Regular ya contado en ese horario."""
+        if fecha_clase is None:
+            return 0
+        try:
+            Asistencia = apps.get_model("attendance", "Asistencia")
+            Asignacion = apps.get_model("regular", "AsignacionRegular")
+        except LookupError:
+            return 0
+        regulares_ids = Asignacion.objects.filter(
+            horario=horario, activa=True
+        ).values_list("regular__alumno_id", flat=True)
+        return (
+            Asistencia.objects.filter(
+                horario=horario,
+                fecha=fecha_clase,
+                es_reposicion=True,
+                estado__in=("programada", "asistio", "pendiente_compensacion"),
+            )
+            .exclude(alumno_id__in=regulares_ids)
+            .count()
+        )
+
     @classmethod
     def cupo_disponible(
         cls,
@@ -160,7 +184,8 @@ class CapacityService:
             if reservas_flexi_vigentes is not None
             else cls.count_reservas_flexi_vigentes(horario, fecha_clase=fecha_clase)
         )
-        return max(0, horario.capacidad - reg - flex)
+        repos = cls.count_reposiciones(horario, fecha_clase=fecha_clase)
+        return max(0, horario.capacidad - reg - flex - repos)
 
     @classmethod
     def assert_tiene_cupo(

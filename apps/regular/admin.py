@@ -29,8 +29,8 @@ class PeriodoCobroRegularInline(admin.TabularInline):
 
 @admin.register(Regular)
 class RegularAdmin(admin.ModelAdmin):
-    list_display = ("alumno", "fecha_inicio", "estado", "updated_at")
-    list_filter = ("estado",)
+    list_display = ("alumno", "sucursal", "plan_horas_semana", "fecha_inicio", "estado", "updated_at")
+    list_filter = ("estado", "sucursal")
     search_fields = ("alumno__nombre_completo",)
     raw_id_fields = ("alumno",)
     inlines = [AsignacionRegularInline, PeriodoCobroRegularInline]

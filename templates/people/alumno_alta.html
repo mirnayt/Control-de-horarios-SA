@@ -16,6 +16,21 @@
     <p class="muted">Adolescente se deriva de la fecha de nacimiento (13+ años) cuando el tipo es Niño.</p>
   </div>
   <div class="form-group">
+    <label class="form-label">Sucursal</label>
+    <select class="form-input" name="sucursal_id">
+      <option value="">— Sin sucursal —</option>
+      {% for s in sucursales %}
+      <option value="{{ s.id }}">{{ s.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-group checkbox-group">
+    <label><input type="checkbox" name="requiere_factura" value="1"> Requiere factura (IVA)</label>
+  </div>
+  <div class="form-group checkbox-group">
+    <label><input type="checkbox" name="pack_intro" value="1"> Pack intro Iztacalco (4 sesiones × 3 h / $900)</label>
+  </div>
+  <div class="form-group">
     <label class="form-label">Fecha de nacimiento</label>
     <input class="form-input" type="date" name="fecha_nacimiento">
   </div>

@@ -3,6 +3,13 @@
 {% block content %}
 <div class="page-header"><h1>Programar asistencia</h1></div>
 
+<form method="get" class="form-card" style="margin-bottom:1rem;" action="{% url 'asistencia_programar' %}">
+  <div class="form-group">
+    <label class="form-label">Alumno</label>
+    {% include "includes/alumno_autocomplete.html" with selected=alumno_sel navigate_url=programar_url activos="1" placeholder="Buscar alumno" %}
+  </div>
+</form>
+
 <form method="post" id="form-programar" class="form-card">
   {% csrf_token %}
   <div class="form-group">

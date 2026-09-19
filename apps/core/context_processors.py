@@ -23,6 +23,7 @@ _NAV_SECTIONS: dict[str, str] = {
     "asistencia_accion": "asistencias",
     "compensaciones_list": "compensaciones",
     "compensacion_accion": "compensaciones",
+    "reposicion_agendar": "compensaciones",
     "excepciones_list": "excepciones",
     "excepcion_nueva": "excepciones",
     "excepcion_accion": "excepciones",

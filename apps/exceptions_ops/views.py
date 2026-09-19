@@ -65,6 +65,10 @@ def excepciones_list(request):
 def excepcion_nueva(request):
 
     alumnos = alumnos_activos()
+    alumno_sel = None
+    pre = alumno_id_preseleccionado(request)
+    if pre:
+        alumno_sel = alumnos.filter(pk=pre).first()
 
     if request.method == "POST":
 
@@ -106,7 +110,7 @@ def excepcion_nueva(request):
 
         "exceptions_ops/excepcion_nueva.html",
 
-        {"alumnos": alumnos, "tipos": TipoExcepcion.choices, "alumno_preseleccionado": alumno_id_preseleccionado(request)},
+        {"alumnos": alumnos, "alumno_sel": alumno_sel, "tipos": TipoExcepcion.choices, "alumno_preseleccionado": alumno_id_preseleccionado(request)},
 
     )
 

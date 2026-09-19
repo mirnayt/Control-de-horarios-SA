@@ -15,6 +15,7 @@ class EstadoPeriodoCobro(models.TextChoices):
     """Estados del ciclo 1–7 / 8–10 / 11 (pagos reales en etapas posteriores)."""
 
     PENDIENTE = "pendiente", "Pendiente"
+    PARCIAL = "parcial", "Abono parcial"
     PAGADO_A_TIEMPO = "pagado_a_tiempo", "Pagado a tiempo"
     PAGADO_CON_RECARGO = "pagado_con_recargo", "Pagado con recargo"
     VENCIDO = "vencido", "Vencido"
@@ -32,6 +33,23 @@ class Regular(TimeStampedModel):
         on_delete=models.PROTECT,
         related_name="regulares",
     )
+    sucursal = models.ForeignKey(
+        "catalog.Sucursal",
+        on_delete=models.PROTECT,
+        related_name="regulares",
+        null=True,
+        blank=True,
+    )
+    plan_horas_semana = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Horas semanales del plan (2 o 3 en Iztacalco).",
+    )
+    es_tarifa_fundadora = models.BooleanField(
+        default=False,
+        help_text="Del Valle: primeros alumnos ($1440). Si False, tarifa siguiente ($1500).",
+    )
+    codigo_tarifa = models.SlugField(max_length=32, blank=True)
     fecha_inicio = models.DateField()
     estado = models.CharField(
         max_length=32,

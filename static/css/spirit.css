@@ -624,7 +624,7 @@ table:not(.data-table) th {
   color: var(--sa-ink-muted);
 }
 
-.badge-agotado, .badge-pendiente_compensacion {
+.badge-agotado, .badge-pendiente_compensacion, .badge-parcial, .badge-agendada {
   background: var(--sa-warn-soft);
   color: var(--sa-warn);
 }
@@ -718,6 +718,31 @@ form p { margin: 0 0 1rem; }
 }
 
 .form-actions { margin-top: 1.25rem; }
+
+.alumno-ac { position: relative; max-width: 22rem; }
+.alumno-ac-list {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #cfcfcf;
+  border-radius: var(--sa-radius);
+  box-shadow: var(--sa-shadow-md);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.alumno-ac-item {
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+}
+.alumno-ac-item strong { display: block; font-weight: 600; color: #111; }
+.alumno-ac-item span { display: block; font-size: 0.8rem; color: var(--sa-ink-muted); }
+.alumno-ac-item:hover { background: #faf6ec; }
+.alumno-ac-empty { padding: 0.5rem 0.75rem; color: var(--sa-ink-muted); }
 
 /* —— Responsive —— */
 @media (max-width: 860px) {

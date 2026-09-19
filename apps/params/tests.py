@@ -14,6 +14,7 @@ class ParamsTests(TestCase):
         version = seed_parametros_iniciales()
         self.assertEqual(version.bloques_adulto.count(), 3)
         self.assertEqual(version.vigencias_flexi.count(), 6)
+        self.assertEqual(version.tarifas_sucursal.count(), 6)
         self.assertTrue(version.sabado_adulto_sin_descuento_progresivo)
         self.assertEqual(version.tarifa_hora_adulto, Decimal("120.00"))
 
@@ -121,3 +122,42 @@ class PricingServiceTests(TestCase):
             PricingService.monto_clase_suelta(version=self.version),
             Decimal("500.00"),
         )
+
+    def test_tarifas_sucursal_iztacalco_y_del_valle(self):
+        from apps.catalog.models import Sucursal
+
+        izt = Sucursal.objects.get(codigo="iztacalco")
+        dv = Sucursal.objects.get(codigo="del_valle")
+        self.assertEqual(
+            PricingService.monto_plan_sucursal(
+                sucursal=izt, horas_semana_plan=2, version=self.version
+            )[0],
+            Decimal("496.00"),
+        )
+        self.assertEqual(
+            PricingService.monto_plan_sucursal(
+                sucursal=izt, horas_semana_plan=3, version=self.version
+            )[0],
+            Decimal("744.00"),
+        )
+        self.assertEqual(
+            PricingService.monto_plan_sucursal(
+                sucursal=dv, es_tarifa_fundadora=True, version=self.version
+            )[0],
+            Decimal("1440.00"),
+        )
+        self.assertEqual(
+            PricingService.monto_plan_sucursal(
+                sucursal=dv, es_tarifa_fundadora=False, version=self.version
+            )[0],
+            Decimal("1500.00"),
+        )
+        diff = PricingService.monto_diferencia_reposicion(
+            sucursal_origen=izt,
+            sucursal_destino=dv,
+            duracion_origen_minutos=120,
+            duracion_destino_minutos=180,
+            plan_horas_semana=2,
+            version=self.version,
+        )
+        self.assertGreater(diff, Decimal("0.00"))

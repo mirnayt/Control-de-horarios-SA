@@ -399,15 +399,15 @@ class UIHardeningTests(TestCase):
         )
         r_nino = self.c.get(reverse("regular_alta"), {"alumno_id": nino.pk})
         content_nino = r_nino.content.decode()
-        self.assertIn(f'value="{h_nino.pk}"', content_nino)
-        self.assertIn(f'value="{h_ambos.pk}"', content_nino)
-        self.assertNotIn(f'value="{h_adulto.pk}"', content_nino)
+        self.assertIn(f'name="horario_ids" value="{h_nino.pk}"', content_nino)
+        self.assertIn(f'name="horario_ids" value="{h_ambos.pk}"', content_nino)
+        self.assertNotIn(f'name="horario_ids" value="{h_adulto.pk}"', content_nino)
 
         r_adulto = self.c.get(reverse("regular_alta"), {"alumno_id": adulto.pk})
         content_adulto = r_adulto.content.decode()
-        self.assertIn(f'value="{h_adulto.pk}"', content_adulto)
-        self.assertIn(f'value="{h_ambos.pk}"', content_adulto)
-        self.assertNotIn(f'value="{h_nino.pk}"', content_adulto)
+        self.assertIn(f'name="horario_ids" value="{h_adulto.pk}"', content_adulto)
+        self.assertIn(f'name="horario_ids" value="{h_ambos.pk}"', content_adulto)
+        self.assertNotIn(f'name="horario_ids" value="{h_nino.pk}"', content_adulto)
 
     def test_excepcion_solo_alumnos_activos(self):
         activo = alta_alumno(nombre_completo="Activo", tipo=TipoAlumno.ADULTO)
@@ -415,8 +415,13 @@ class UIHardeningTests(TestCase):
         baja.estado = EstadoAlumno.BAJA_VOLUNTARIA
         baja.save()
         r = self.c.get(reverse("excepcion_nueva"))
-        self.assertContains(r, activo.nombre_completo)
-        self.assertNotContains(r, baja.nombre_completo)
+        self.assertEqual(r.status_code, 200)
+        r_act = self.c.get(reverse("alumnos_buscar"), {"q": "Activo", "activos": "1"})
+        names = [item["text"] for item in r_act.json()["results"]]
+        self.assertIn(activo.nombre_completo, names)
+        r_baja = self.c.get(reverse("alumnos_buscar"), {"q": "Baja", "activos": "1"})
+        names_baja = [item["text"] for item in r_baja.json()["results"]]
+        self.assertNotIn(baja.nombre_completo, names_baja)
 
     def test_programar_flexi_con_reserva_valida(self):
         alumno = alta_alumno(nombre_completo="Res UI", tipo=TipoAlumno.ADULTO)
@@ -525,7 +530,13 @@ class UIDashboardTests(TestCase):
             r = self.c.get(reverse(name) + q)
             self.assertContains(
                 r,
-                f'<option value="{alumno.pk}" selected>',
+                f'name="alumno_id"',
+                msg_prefix=name,
+            )
+            self.assertContains(r, alumno.nombre_completo, msg_prefix=name)
+            self.assertContains(
+                r,
+                f'value="{alumno.pk}"',
                 msg_prefix=name,
             )
         r = self.c.get(reverse("regular_alta") + q)
@@ -616,6 +627,13 @@ class UIUXPolishTests(TestCase):
         r = self.c.get(reverse("alumnos_list"), {"q": "Ana"})
         self.assertContains(r, "Ana Busca")
         self.assertNotContains(r, "Pedro Otro")
+
+    def test_alumnos_buscar_json(self):
+        alta_alumno(nombre_completo="Ana JSON", tipo=TipoAlumno.ADULTO)
+        r = self.c.get(reverse("alumnos_buscar"), {"q": "Ana"})
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(any(item["text"] == "Ana JSON" for item in data["results"]))
 
     def test_pagos_muestra_desglose_y_formato_moneda(self):
         alumno = alta_alumno(nombre_completo="Pago UI", tipo=TipoAlumno.ADULTO)

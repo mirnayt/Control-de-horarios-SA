@@ -8,10 +8,14 @@ class ConceptoLinea(models.TextChoices):
     MENSUALIDAD = "mensualidad", "Mensualidad"
     RECARGO = "recargo", "Recargo"
     INSCRIPCION = "inscripcion", "Inscripción"
+    PACK_INTRO = "pack_intro", "Pack intro (4 sesiones)"
+    DIFERENCIA_REPOSICION = "diferencia_reposicion", "Diferencia reposición"
+    AJUSTE = "ajuste", "Ajuste / excepción"
 
 
 class EstadoLineaCobro(models.TextChoices):
     PENDIENTE = "pendiente", "Pendiente"
+    PARCIAL = "parcial", "Parcial"
     PAGADA = "pagada", "Pagada"
     CANCELADA = "cancelada", "Cancelada"
 
@@ -46,6 +50,13 @@ class LineaCobro(TimeStampedModel):
     )
     concepto = models.CharField(max_length=32, choices=ConceptoLinea.choices)
     monto = models.DecimalField(max_digits=12, decimal_places=2)
+    monto_calculado = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Monto de catálogo antes de ajustes operativos.",
+    )
     estado = models.CharField(
         max_length=16,
         choices=EstadoLineaCobro.choices,
@@ -76,12 +87,14 @@ class LineaCobro(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["periodo", "concepto"],
-                condition=models.Q(periodo__isnull=False),
+                condition=models.Q(periodo__isnull=False)
+                & ~models.Q(estado="cancelada"),
                 name="uniq_linea_cobro_periodo_concepto",
             ),
             models.UniqueConstraint(
                 fields=["alumno", "concepto"],
-                condition=models.Q(concepto="inscripcion"),
+                condition=models.Q(concepto="inscripcion")
+                & ~models.Q(estado="cancelada"),
                 name="uniq_linea_cobro_inscripcion_alumno",
             ),
         ]
@@ -92,26 +105,43 @@ class LineaCobro(TimeStampedModel):
         return f"{self.concepto} alumno={self.alumno_id} = {self.monto}"
 
     def save(self, *args, **kwargs):
+        allow_ajuste = getattr(self, "_allow_ajuste", False)
+        if self.monto_calculado is None and self.monto is not None:
+            self.monto_calculado = self.monto
         if self.pk:
             prev = LineaCobro.objects.filter(pk=self.pk).values(
                 "monto",
+                "monto_calculado",
                 "reglas_aplicadas",
                 "concepto",
                 "periodo_id",
                 "alumno_id",
                 "parametro_version_id",
             ).first()
-            if prev and (
-                prev["monto"] != self.monto
-                or prev["reglas_aplicadas"] != self.reglas_aplicadas
-                or prev["concepto"] != self.concepto
-                or prev["periodo_id"] != self.periodo_id
-                or prev["alumno_id"] != self.alumno_id
-                or prev["parametro_version_id"] != self.parametro_version_id
-            ):
-                raise ValidationError(
-                    "LineaCobro es inmutable en monto, reglas, concepto, periodo y alumno."
+            if prev:
+                core_changed = (
+                    prev["concepto"] != self.concepto
+                    or prev["periodo_id"] != self.periodo_id
+                    or prev["alumno_id"] != self.alumno_id
+                    or prev["parametro_version_id"] != self.parametro_version_id
+                    or prev["monto_calculado"] != self.monto_calculado
                 )
+                if core_changed:
+                    raise ValidationError(
+                        "LineaCobro es inmutable en concepto, periodo, alumno y monto calculado."
+                    )
+                if prev["monto"] != self.monto or prev["reglas_aplicadas"] != self.reglas_aplicadas:
+                    if not allow_ajuste or self.aplicaciones.exists():
+                        raise ValidationError(
+                            "LineaCobro es inmutable en monto, reglas, concepto, periodo y alumno."
+                        )
+                    if self.estado not in (
+                        EstadoLineaCobro.PENDIENTE,
+                        EstadoLineaCobro.PARCIAL,
+                    ):
+                        raise ValidationError(
+                            "Solo se puede ajustar una línea pendiente o parcial."
+                        )
         super().save(*args, **kwargs)
 
 
@@ -134,6 +164,24 @@ class Pago(TimeStampedModel):
         default=EstadoPago.CONFIRMADO,
     )
     monto_total = models.DecimalField(max_digits=12, decimal_places=2)
+    monto_base = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Monto aplicado a la deuda (sin IVA).",
+    )
+    monto_iva = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    tasa_iva = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=0,
+    )
+    requiere_factura = models.BooleanField(default=False)
     fecha_pago = models.DateField(
         help_text="Fecha civil del pago (America/Mexico_City).",
     )
@@ -201,3 +249,27 @@ class EjecucionCobranza(TimeStampedModel):
 
     def __str__(self):
         return f"Cobranza {self.fecha}"
+
+
+class PagoAplicacion(TimeStampedModel):
+    """Abono de un pago sobre una línea de cobro (permite pagos parciales)."""
+
+    pago = models.ForeignKey(
+        Pago,
+        on_delete=models.PROTECT,
+        related_name="aplicaciones",
+    )
+    linea = models.ForeignKey(
+        LineaCobro,
+        on_delete=models.PROTECT,
+        related_name="aplicaciones",
+    )
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "Aplicación de pago"
+        verbose_name_plural = "Aplicaciones de pago"
+
+    def __str__(self):
+        return f"Pago {self.pago_id} → línea {self.linea_id} = {self.monto}"

@@ -33,6 +33,7 @@
           <th>ID</th>
           <th>Nombre</th>
           <th>Clasificación</th>
+          <th>Sucursal</th>
           <th>Edad</th>
           <th>Tel / WhatsApp</th>
           <th>Tutor</th>
@@ -45,6 +46,7 @@
           <td>{{ a.id }}</td>
           <td><a href="{% url 'alumno_detail' a.id %}">{{ a.nombre_completo }}</a></td>
           <td>{{ a.clasificacion }}</td>
+          <td>{{ a.sucursal|default:"—" }}</td>
           <td>{% if a.edad is not None %}{{ a.edad }}{% else %}—{% endif %}</td>
           <td>
             {% if a.telefono or a.whatsapp %}
@@ -59,7 +61,7 @@
           <td>{% include "includes/badge.html" with label=a.get_estado_display tone=a.estado %}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="7">{% if q %}Sin resultados para «{{ q }}»{% else %}Sin alumnos{% endif %}</td></tr>
+        <tr><td colspan="8">{% if q %}Sin resultados para «{{ q }}»{% else %}Sin alumnos{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

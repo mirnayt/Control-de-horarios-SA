@@ -3,7 +3,14 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .models import BloqueTarifaAdulto, MetodoPagoCatalogo, ParametroVersion, VigenciaFlexi
+from .models import (
+    BloqueTarifaAdulto,
+    CodigoTarifa,
+    MetodoPagoCatalogo,
+    ParametroVersion,
+    TarifaSucursal,
+    VigenciaFlexi,
+)
 
 # Tabla comercial inicial documentada.
 VIGENCIAS_FLEXI_INICIAL = (
@@ -27,9 +34,41 @@ METODOS_PAGO_INICIAL = (
     ("link", "Link de pago"),
 )
 
+SUCURSALES_INICIAL = (
+    ("iztacalco", "Iztacalco"),
+    ("del_valle", "Del Valle"),
+)
+
+# (sucursal_codigo, codigo_tarifa, monto, horas_semana, sesiones)
+TARIFAS_SUCURSAL_INICIAL = (
+    ("iztacalco", CodigoTarifa.MENSUAL_2H, Decimal("496.00"), 2, None),
+    ("iztacalco", CodigoTarifa.MENSUAL_3H, Decimal("744.00"), 3, None),
+    ("iztacalco", CodigoTarifa.PACK_NUEVO_4X3, Decimal("900.00"), 3, 4),
+    ("del_valle", CodigoTarifa.SESION_3H, Decimal("375.00"), 3, 1),
+    ("del_valle", CodigoTarifa.MENSUAL_FUNDADOR, Decimal("1440.00"), 3, None),
+    ("del_valle", CodigoTarifa.MENSUAL_SIGUIENTE, Decimal("1500.00"), 3, None),
+)
+
+
+def seed_sucursales():
+    from apps.catalog.models import Sucursal
+
+    creadas = []
+    for codigo, nombre in SUCURSALES_INICIAL:
+        obj, _ = Sucursal.objects.get_or_create(
+            codigo=codigo,
+            defaults={"nombre": nombre, "activo": True},
+        )
+        creadas.append(obj)
+    return {s.codigo: s for s in Sucursal.objects.filter(
+        codigo__in=[c for c, _ in SUCURSALES_INICIAL]
+    )}
+
 
 def seed_parametros_iniciales(*, force: bool = False) -> ParametroVersion:
     """Crea la primera versión de parámetros si no existe ninguna."""
+    sucursales = seed_sucursales()
+
     for codigo, nombre in METODOS_PAGO_INICIAL:
         MetodoPagoCatalogo.objects.get_or_create(
             codigo=codigo,
@@ -38,6 +77,7 @@ def seed_parametros_iniciales(*, force: bool = False) -> ParametroVersion:
 
     existing = ParametroVersion.objects.order_by("vigente_desde").first()
     if existing and not force:
+        _asegurar_tarifas_sucursal(existing, sucursales)
         return existing
 
     version = ParametroVersion.objects.create(
@@ -58,7 +98,25 @@ def seed_parametros_iniciales(*, force: bool = False) -> ParametroVersion:
             sesiones_max=smax,
             meses_vigencia=meses,
         )
+    _asegurar_tarifas_sucursal(version, sucursales)
     return version
+
+
+def _asegurar_tarifas_sucursal(version: ParametroVersion, sucursales: dict) -> None:
+    for suc_codigo, tarifa_codigo, monto, horas, sesiones in TARIFAS_SUCURSAL_INICIAL:
+        sucursal = sucursales.get(suc_codigo)
+        if sucursal is None:
+            continue
+        TarifaSucursal.objects.get_or_create(
+            parametro_version=version,
+            sucursal=sucursal,
+            codigo=tarifa_codigo,
+            defaults={
+                "monto": monto,
+                "horas_semana": horas,
+                "sesiones": sesiones,
+            },
+        )
 
 
 class PricingService:
@@ -230,3 +288,131 @@ class PricingService:
         if hsab:
             total += cls.monto_regular_adulto(hsab, version=v, es_sabado=True)
         return total.quantize(Decimal("0.01"))
+
+    @classmethod
+    def tarifa_sucursal(
+        cls,
+        sucursal,
+        codigo: str,
+        *,
+        version: ParametroVersion | None = None,
+    ) -> TarifaSucursal | None:
+        if sucursal is None:
+            return None
+        v = cls._version(version)
+        return TarifaSucursal.objects.filter(
+            parametro_version=v,
+            sucursal=sucursal,
+            codigo=codigo,
+        ).first()
+
+    @classmethod
+    def monto_plan_sucursal(
+        cls,
+        *,
+        sucursal,
+        horas_semana_plan: int | None = None,
+        es_tarifa_fundadora: bool = False,
+        version: ParametroVersion | None = None,
+    ) -> tuple[Decimal, str] | None:
+        """
+        Mensualidad plana por sucursal. None si no hay catálogo aplicable
+        (el caller usa el cálculo por hora legado).
+        """
+        if sucursal is None:
+            return None
+        v = cls._version(version)
+        codigo = sucursal.codigo
+        if codigo == "iztacalco":
+            if horas_semana_plan == 2:
+                key = CodigoTarifa.MENSUAL_2H
+            elif horas_semana_plan == 3:
+                key = CodigoTarifa.MENSUAL_3H
+            else:
+                return None
+        elif codigo == "del_valle":
+            key = (
+                CodigoTarifa.MENSUAL_FUNDADOR
+                if es_tarifa_fundadora
+                else CodigoTarifa.MENSUAL_SIGUIENTE
+            )
+        else:
+            return None
+        tarifa = cls.tarifa_sucursal(sucursal, key, version=v)
+        if tarifa is None:
+            return None
+        return tarifa.monto.quantize(Decimal("0.01")), tarifa.codigo
+
+    @classmethod
+    def precio_sesion(
+        cls,
+        sucursal,
+        *,
+        duracion_minutos: int,
+        plan_horas_semana: int | None = None,
+        version: ParametroVersion | None = None,
+    ) -> Decimal:
+        """Valor de una sesión para calcular diferencias de reposición."""
+        v = cls._version(version)
+        if sucursal is None:
+            horas = Decimal(duracion_minutos) / Decimal(60)
+            return (horas * v.tarifa_hora_adulto).quantize(Decimal("0.01"))
+
+        if sucursal.codigo == "del_valle":
+            tarifa = cls.tarifa_sucursal(
+                sucursal, CodigoTarifa.SESION_3H, version=v
+            )
+            if tarifa:
+                if duracion_minutos == 180:
+                    return tarifa.monto.quantize(Decimal("0.01"))
+                hora = tarifa.monto / Decimal(3)
+                return (hora * (Decimal(duracion_minutos) / Decimal(60))).quantize(
+                    Decimal("0.01")
+                )
+
+        if sucursal.codigo == "iztacalco":
+            horas_plan = plan_horas_semana
+            if horas_plan not in (2, 3):
+                horas_plan = 3 if duracion_minutos >= 180 else 2
+            key = (
+                CodigoTarifa.MENSUAL_3H if horas_plan == 3 else CodigoTarifa.MENSUAL_2H
+            )
+            tarifa = cls.tarifa_sucursal(sucursal, key, version=v)
+            if tarifa:
+                return (tarifa.monto / Decimal(4)).quantize(Decimal("0.01"))
+
+        horas = Decimal(duracion_minutos) / Decimal(60)
+        return (horas * v.tarifa_hora_adulto).quantize(Decimal("0.01"))
+
+    @classmethod
+    def monto_diferencia_reposicion(
+        cls,
+        *,
+        sucursal_origen,
+        sucursal_destino,
+        duracion_origen_minutos: int,
+        duracion_destino_minutos: int,
+        plan_horas_semana: int | None = None,
+        version: ParametroVersion | None = None,
+    ) -> Decimal:
+        origen = cls.precio_sesion(
+            sucursal_origen,
+            duracion_minutos=duracion_origen_minutos,
+            plan_horas_semana=plan_horas_semana,
+            version=version,
+        )
+        destino = cls.precio_sesion(
+            sucursal_destino,
+            duracion_minutos=duracion_destino_minutos,
+            plan_horas_semana=plan_horas_semana,
+            version=version,
+        )
+        diff = destino - origen
+        if diff < 0:
+            return Decimal("0.00")
+        return diff.quantize(Decimal("0.01"))
+
+    @classmethod
+    def monto_iva(cls, base: Decimal, *, version: ParametroVersion | None = None) -> Decimal:
+        v = cls._version(version)
+        return (Decimal(base) * v.tasa_iva).quantize(Decimal("0.01"))

@@ -12,6 +12,11 @@ urlpatterns = [
         name="compensaciones_list",
     ),
     path(
+        "compensaciones/<int:pk>/agendar/",
+        views.reposicion_agendar,
+        name="reposicion_agendar",
+    ),
+    path(
         "compensaciones/<int:pk>/accion/",
         views.compensacion_accion,
         name="compensacion_accion",

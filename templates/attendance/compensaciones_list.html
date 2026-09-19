@@ -2,7 +2,7 @@
 {% block title %}Compensaciones{% endblock %}
 {% block content %}
 <div class="page-header"><h1>Compensaciones</h1></div>
-<p class="muted">Clases canceladas por Spirit que requieren reposición o reembolso. Dirección autoriza reembolsos.</p>
+<p class="muted">Clases canceladas por Spirit o faltas avisadas a tiempo. Dirección autoriza reembolsos.</p>
 
 <div class="panel">
   <div class="table-wrap">
@@ -22,15 +22,16 @@
         <tr>
           <td><a href="{% url 'alumno_detail' c.asistencia.alumno_id %}">{{ c.asistencia.alumno }}</a></td>
           <td>{{ c.asistencia.fecha }} · {{ c.asistencia.horario }}</td>
-          <td>Cancelada por Spirit{% if c.notas %}: {{ c.notas }}{% endif %}</td>
+          <td>{{ c.get_motivo_display }}{% if c.notas %}: {{ c.notas }}{% endif %}</td>
           <td>{% include "includes/badge.html" with label=c.get_estado_display tone=c.estado %}</td>
-          <td>{{ c.get_tipo_display|default:"Pendiente de decisión" }}{% if c.monto %} (${{ c.monto }}){% endif %}</td>
+          <td>{{ c.get_tipo_display|default:"Pendiente de decisión" }}{% if c.monto %} (${{ c.monto }}){% endif %}{% if c.monto_diferencia %} · diferencia ${{ c.monto_diferencia }}{% endif %}</td>
           <td>
             {% if c.estado == "pendiente" %}
             <form method="post" action="{% url 'compensacion_accion' c.id %}" class="inline-form">
               {% csrf_token %}
               <input class="form-input" name="notas" placeholder="Notas" style="width:auto;max-width:8rem;">
-              <button class="btn btn-sm" name="accion" value="reposicion">Reposición s/costo</button>
+              <button class="btn btn-sm btn-primary" name="accion" value="agendar">Agendar reposición</button>
+              <button class="btn btn-sm" name="accion" value="reposicion">Cerrar s/agendar</button>
               {% if es_direccion %}
               <input class="form-input" name="monto" placeholder="Monto" size="6" style="width:auto;max-width:5rem;">
               <button class="btn btn-sm btn-primary" name="accion" value="reembolso">Autorizar reembolso</button>

@@ -43,6 +43,17 @@ class ParametroVersion(TimeStampedModel):
     # Regular sábado adulto: siempre tarifa base, sin bloques progresivos.
     sabado_adulto_sin_descuento_progresivo = models.BooleanField(default=True)
 
+    tasa_iva = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal("0.1600"),
+        help_text="IVA a agregar cuando el cliente requiere factura (0.16 = 16%).",
+    )
+    horas_aviso_reposicion = models.PositiveSmallIntegerField(
+        default=24,
+        help_text="Horas de anticipación para avisar falta y conservar reposición.",
+    )
+
     class Meta:
         ordering = ["-vigente_desde"]
         verbose_name = "Versión de parámetros"
@@ -113,6 +124,43 @@ class VigenciaFlexi(models.Model):
     def clean(self):
         if self.sesiones_min > self.sesiones_max:
             raise ValidationError("sesiones_min no puede ser mayor que sesiones_max.")
+
+
+class CodigoTarifa(models.TextChoices):
+    MENSUAL_2H = "mensual_2h", "Mensualidad 2 horas"
+    MENSUAL_3H = "mensual_3h", "Mensualidad 3 horas"
+    PACK_NUEVO_4X3 = "pack_nuevo_4x3", "Pack nuevo 4 sesiones × 3 h"
+    SESION_3H = "sesion_3h", "Sesión 3 horas"
+    MENSUAL_FUNDADOR = "mensual_fundador", "Mensualidad fundador"
+    MENSUAL_SIGUIENTE = "mensual_siguiente", "Mensualidad siguiente"
+
+
+class TarifaSucursal(models.Model):
+    """Monto de catálogo por sucursal (snapshot vía ParametroVersion)."""
+
+    parametro_version = models.ForeignKey(
+        ParametroVersion,
+        on_delete=models.CASCADE,
+        related_name="tarifas_sucursal",
+    )
+    sucursal = models.ForeignKey(
+        "catalog.Sucursal",
+        on_delete=models.PROTECT,
+        related_name="tarifas",
+    )
+    codigo = models.SlugField(max_length=32, choices=CodigoTarifa.choices)
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    horas_semana = models.PositiveSmallIntegerField(null=True, blank=True)
+    sesiones = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["sucursal__nombre", "codigo"]
+        unique_together = [("parametro_version", "sucursal", "codigo")]
+        verbose_name = "Tarifa por sucursal"
+        verbose_name_plural = "Tarifas por sucursal"
+
+    def __str__(self):
+        return f"{self.sucursal} {self.codigo} = {self.monto}"
 
 
 class MetodoPagoCatalogo(TimeStampedModel):

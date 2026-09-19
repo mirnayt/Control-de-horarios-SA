@@ -1,0 +1,21 @@
+{% comment %}
+  Widget de autocompletado. Params:
+    selected: Alumno o None
+    name_id: default alumno_id
+    navigate_url: si se setea, al elegir navega a esa URL + ?alumno_id=
+    activos: "1" para filtrar activos
+    adultos: "1" para solo adultos
+    placeholder
+{% endcomment %}
+<div class="alumno-ac"
+     data-url="{% url 'alumnos_buscar' %}"
+     {% if navigate_url %}data-navigate="{{ navigate_url }}"{% endif %}
+     data-activos="{{ activos|default:'' }}"
+     data-adultos="{{ adultos|default:'' }}">
+  <input type="hidden" name="{{ name_id|default:'alumno_id' }}" class="alumno-ac-id"
+         value="{% if selected %}{{ selected.pk }}{% elif alumno_preseleccionado %}{{ alumno_preseleccionado }}{% endif %}">
+  <input class="form-input alumno-ac-q" type="search" autocomplete="off"
+         placeholder="{{ placeholder|default:'Nombre, ID o teléfono' }}"
+         value="{% if selected %}{{ selected.nombre_completo }}{% endif %}">
+  <ul class="alumno-ac-list" hidden></ul>
+</div>

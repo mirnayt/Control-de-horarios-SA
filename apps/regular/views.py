@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from apps.accounts.decorators import staff_operativo_required
@@ -70,7 +71,11 @@ def regular_alta(request):
                 raise ValidationError(
                     "Uno o más horarios no están activos o no son válidos."
                 )
-            reg = alta_regular(alumno=alumno, horarios=hs)
+            reg = alta_regular(
+                alumno=alumno,
+                horarios=hs,
+                es_tarifa_fundadora=request.POST.get("es_tarifa_fundadora") == "1",
+            )
             messages.success(request, f"Alta Regular: {reg}")
             return redirect("regular_list")
         except (Alumno.DoesNotExist, ValidationError) as e:
@@ -88,5 +93,7 @@ def regular_alta(request):
                 {"horario": h, "cupo": CapacityService.cupo_disponible(h)}
                 for h in horarios
             ],
+            "regular_alta_url": reverse("regular_alta"),
+            "es_tarifa_fundadora": request.POST.get("es_tarifa_fundadora") == "1",
         },
     )

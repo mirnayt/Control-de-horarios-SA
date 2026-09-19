@@ -3,6 +3,7 @@ from datetime import date
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -10,7 +11,9 @@ from apps.accounts.decorators import staff_operativo_required
 from apps.accounts.roles import user_is_direccion
 from apps.attendance.models import Asistencia, Compensacion, EstadoAsistencia, EstadoCompensacion
 from apps.attendance.services import (
+    agendar_reposicion,
     autorizar_reembolso,
+    avisar_falta_alumno,
     cancelar_por_spirit,
     marcar_asistio,
     marcar_ausente_alumno,
@@ -22,6 +25,7 @@ from apps.core.ui import (
     asignaciones_regular_activas,
     alumno_id_preseleccionado,
     etiqueta_dia,
+    horarios_con_cupo,
     mensaje_error_operacion,
     proxima_fecha_dia,
     reservas_flexi_programables,
@@ -29,7 +33,8 @@ from apps.core.ui import (
 from apps.flexi.models import ReservaFlexi
 from apps.people.models import Alumno
 from apps.regular.models import AsignacionRegular
-from apps.scheduling.models import Horario
+from apps.scheduling.models import Horario, Modalidad
+from apps.scheduling.services import CapacityService
 
 from decimal import Decimal, InvalidOperation
 
@@ -165,6 +170,8 @@ def asistencia_programar(request):
             "filas_asignaciones": filas_asig,
             "reservas": reservas,
             "alumno_preseleccionado": alumno_pre,
+            "alumno_sel": Alumno.objects.filter(pk=alumno_pre).first() if alumno_pre else None,
+            "programar_url": reverse("asistencia_programar"),
             "modalidad_preseleccionada": modalidad_preseleccionada,
             "fecha_sugerida": fecha_sugerida,
             "hoy": timezone.localdate().isoformat(),
@@ -184,6 +191,9 @@ def asistencia_accion(request, pk):
         elif accion == "ausente":
             marcar_ausente_alumno(asist, usuario=request.user)
             messages.success(request, "Marcada ausente (alumno).")
+        elif accion == "aviso":
+            avisar_falta_alumno(asist, usuario=request.user)
+            messages.success(request, "Falta avisada; pendiente de reposición.")
         elif accion == "spirit":
             cancelar_por_spirit(asist, usuario=request.user)
             messages.success(request, "Cancelada por Spirit; compensación pendiente.")
@@ -224,6 +234,8 @@ def compensacion_accion(request, pk):
                 comp, usuario=request.user, notas=notas
             )
             messages.success(request, "Reposición sin costo registrada.")
+        elif accion == "agendar":
+            return redirect("reposicion_agendar", pk=comp.pk)
         elif accion == "reembolso":
             monto = None
             raw = (request.POST.get("monto") or "").strip()
@@ -238,3 +250,68 @@ def compensacion_accion(request, pk):
     except (PermissionDenied, ValidationError, InvalidOperation) as e:
         messages.error(request, mensaje_error_operacion(e))
     return redirect("compensaciones_list")
+
+
+@staff_operativo_required
+@require_http_methods(["GET", "POST"])
+def reposicion_agendar(request, pk):
+    comp = get_object_or_404(
+        Compensacion.objects.select_related(
+            "asistencia__alumno", "asistencia__horario__salon__sucursal"
+        ),
+        pk=pk,
+    )
+    if comp.estado != EstadoCompensacion.PENDIENTE:
+        messages.error(request, "La compensación ya no está pendiente.")
+        return redirect("compensaciones_list")
+
+    fecha_raw = (
+        request.POST.get("fecha") or request.GET.get("fecha") or ""
+    ).strip()
+    fecha = None
+    if fecha_raw:
+        try:
+            fecha = date.fromisoformat(fecha_raw)
+        except ValueError:
+            fecha = None
+
+    horarios = []
+    if fecha is not None:
+        modalidad = (
+            Modalidad.REGULAR
+            if comp.asistencia.modalidad == "regular"
+            else Modalidad.FLEXI
+        )
+        horarios = horarios_con_cupo(
+            modalidad,
+            alumno=comp.asistencia.alumno,
+            fecha_clase=fecha,
+        )
+
+    if request.method == "POST":
+        try:
+            if fecha is None:
+                raise ValidationError("Indique la fecha de reposición.")
+            horario = Horario.objects.select_related("salon").get(
+                pk=request.POST.get("horario_id"), activo=True
+            )
+            agendar_reposicion(
+                comp, horario=horario, fecha=fecha, usuario=request.user
+            )
+            messages.success(request, "Reposición agendada.")
+            return redirect("compensaciones_list")
+        except (Horario.DoesNotExist, ValidationError, PermissionDenied, ValueError) as e:
+            messages.error(request, mensaje_error_operacion(e))
+
+    return render(
+        request,
+        "attendance/reposicion_agendar.html",
+        {
+            "compensacion": comp,
+            "fecha": fecha_raw,
+            "horarios": [
+                {"horario": h, "cupo": CapacityService.cupo_disponible(h, fecha_clase=fecha)}
+                for h in horarios
+            ],
+        },
+    )

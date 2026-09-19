@@ -21,10 +21,17 @@ class EstadoAsistencia(models.TextChoices):
 class TipoCompensacion(models.TextChoices):
     REEMBOLSO = "reembolso", "Reembolso"
     REPOSICION_SIN_COSTO = "reposicion_sin_costo", "Reposición sin costo"
+    REPOSICION_CON_DIFERENCIA = "reposicion_con_diferencia", "Reposición con diferencia"
+
+
+class MotivoCompensacion(models.TextChoices):
+    CANCELACION_SPIRIT = "cancelacion_spirit", "Cancelación por Spirit"
+    AVISO_ALUMNO = "aviso_alumno", "Aviso de falta del alumno"
 
 
 class EstadoCompensacion(models.TextChoices):
     PENDIENTE = "pendiente", "Pendiente"
+    AGENDADA = "agendada", "Reposición agendada"
     RESUELTA = "resuelta", "Resuelta"
 
 
@@ -67,6 +74,7 @@ class Asistencia(TimeStampedModel):
         related_name="asistencias",
     )
     observaciones = models.CharField(max_length=255, blank=True)
+    es_reposicion = models.BooleanField(default=False)
     registrado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -114,6 +122,11 @@ class Compensacion(TimeStampedModel):
         on_delete=models.PROTECT,
         related_name="compensacion",
     )
+    motivo = models.CharField(
+        max_length=32,
+        choices=MotivoCompensacion.choices,
+        default=MotivoCompensacion.CANCELACION_SPIRIT,
+    )
     tipo = models.CharField(
         max_length=32,
         choices=TipoCompensacion.choices,
@@ -131,6 +144,27 @@ class Compensacion(TimeStampedModel):
         null=True,
         blank=True,
         help_text="Monto de reembolso (si aplica).",
+    )
+    monto_diferencia = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Cargo por reponer en otra sucursal o duración.",
+    )
+    asistencia_reposicion = models.ForeignKey(
+        Asistencia,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="compensacion_origen",
+    )
+    linea_cobro = models.ForeignKey(
+        "billing.LineaCobro",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="compensaciones",
     )
     autorizada_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,

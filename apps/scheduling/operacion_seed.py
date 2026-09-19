@@ -56,6 +56,12 @@ def seed_operacion_spirit(*, force: bool = False) -> OperacionSeedResult:
         defaults={"activo": True, "notas": "Provisional — reemplazar en admin."},
     )
 
+    from apps.catalog.models import Sucursal
+
+    iztacalco = Sucursal.objects.filter(codigo="iztacalco").first()
+    if iztacalco:
+        Salon.objects.filter(sucursal__isnull=True).update(sucursal=iztacalco)
+
     creados = 0
     actualizados = 0
 
